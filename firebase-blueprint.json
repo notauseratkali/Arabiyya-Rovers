@@ -1,0 +1,192 @@
+{
+  "__blueprint_version": "1.0.0",
+  "collections": {
+    "members": {
+      "__doc__": "Member records in the Rover network",
+      "name": "string",
+      "username": "string",
+      "idCard": "string",
+      "dateOfBirth": "string",
+      "gender": "string",
+      "section": "string",
+      "investitureDate": "string",
+      "bloodType": "string",
+      "email": "string",
+      "phone": "string",
+      "mobile": "string",
+      "permanentAddress": "string",
+      "currentAddress": "string",
+      "telegram": "string",
+      "whatsapp": "string",
+      "instagram": "string",
+      "emergencyContactName": "string",
+      "emergencyContactNumber": "string",
+      "role": "string",
+      "crew": "string",
+      "badgeRank": "string",
+      "status": "string",
+      "joinedDate": "string",
+      "location": "string",
+      "createdAt": "timestamp"
+    },
+    "leaders": {
+      "__doc__": "Leaders and advisors records",
+      "name": "string",
+      "title": "string",
+      "email": "string",
+      "phone": "string",
+      "status": "string",
+      "createdAt": "timestamp"
+    },
+    "chat_messages": {
+      "__doc__": "All users group chat messages for Koshaaru Rover Crew",
+      "senderId": "string",
+      "senderName": "string",
+      "senderRole": "string",
+      "senderCrew": "string",
+      "senderBadge": "string",
+      "text": "string",
+      "type": "string",
+      "mediaUrl": "string",
+      "locationName": "string",
+      "createdAt": "timestamp"
+    },
+    "users": {
+      "__doc__": "User accounts representing members and admins",
+      "email": "string",
+      "role": "string",
+      "memberId": "string"
+    },
+    "reports": {
+      "__doc__": "User reports for messages",
+      "reporterId": "string",
+      "reporterName": "string",
+      "messageId": "string",
+      "messageText": "string",
+      "reason": "string",
+      "status": "string",
+      "createdAt": "timestamp"
+    },
+    "crews": {
+      "__doc__": "Managed crews in the Rover network",
+      "name": "string",
+      "description": "string",
+      "leaderId": "string",
+      "createdAt": "timestamp"
+    },
+    "announcements": {
+      "__doc__": "Official announcements from the Council",
+      "title": "string",
+      "content": "string",
+      "category": "string",
+      "priority": "string",
+      "authorName": "string",
+      "authorRole": "string",
+      "createdAt": "timestamp",
+      "pinned": "boolean",
+      "eventDate": "string",
+      "location": "string"
+    },
+    "page_permissions": {
+      "__doc__": "Custom access permissions for members",
+      "memberName": "string",
+      "grantedPages": "array"
+    },
+    "users/{userId}/personal_notes": {
+      "__doc__": "User-specific personal notes",
+      "title": "string",
+      "content": "string",
+      "status": "string",
+      "category": "string",
+      "author": "string",
+      "authorRole": "string",
+      "createdAt": "timestamp",
+      "updatedAt": "timestamp"
+    },
+    "finance_transactions": {
+      "__doc__": "Financial transactions ledger",
+      "type": "string",
+      "category": "string",
+      "description": "string",
+      "amount": "number",
+      "date": "string",
+      "attachmentName": "string",
+      "loggedBy": "string"
+    },
+    "finance_budgets": {
+      "__doc__": "Budget allocations",
+      "name": "string",
+      "allocated": "number",
+      "spent": "number",
+      "category": "string"
+    },
+    "member_progress": {
+      "__doc__": "Individual member badge and training tracking",
+      "name": "string",
+      "role": "string",
+      "crew": "string",
+      "completedBadges": "array",
+      "trainingSessions": "array",
+      "serviceHours": "number"
+    },
+    "training_sessions": {
+      "__doc__": "Scheduled training events",
+      "title": "string",
+      "date": "string",
+      "time": "string",
+      "instructor": "string",
+      "targetAudience": "string",
+      "location": "string",
+      "status": "string"
+    },
+    "service_logs": {
+      "__doc__": "Community service project records",
+      "title": "string",
+      "date": "string",
+      "participants": "array",
+      "hoursPerParticipant": "number",
+      "description": "string"
+    },
+    "events_calendar": {
+      "__doc__": "Official crew events and expeditions",
+      "title": "string",
+      "date": "string",
+      "time": "string",
+      "location": "string",
+      "type": "string",
+      "description": "string",
+      "budgetRequested": "number",
+      "budgetApproved": "boolean",
+      "equipmentRequired": "array",
+      "status": "string"
+    },
+    "records_member_directory": {
+      "__doc__": "Official membership roster for records",
+      "name": "string",
+      "email": "string",
+      "phone": "string",
+      "crew": "string",
+      "status": "string",
+      "joiningDate": "string"
+    },
+    "records_archive": {
+      "__doc__": "Archived official documents",
+      "title": "string",
+      "category": "string",
+      "uploadedBy": "string",
+      "date": "string",
+      "fileName": "string",
+      "contentSummary": "string",
+      "isArchived": "boolean"
+    },
+    "system": {
+      "__doc__": "Global system settings",
+      "portal_settings": {
+        "explorerToRoverAge": "number",
+        "roverToLeaderAge": "number",
+        "portalName": "string",
+        "portalTagline": "string"
+      }
+    }
+  }
+}
