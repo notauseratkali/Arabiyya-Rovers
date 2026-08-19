@@ -41,9 +41,11 @@ import {
   Calendar,
   Heart,
   MessageSquare,
-  Send
+  Send,
+  Network
 } from 'lucide-react';
 import { sendWelcomeMessageForMember } from '../services/chatService';
+import { OrgChart } from './OrgChart';
 
 export interface MemberItem {
   id: string;
@@ -95,6 +97,24 @@ export interface LeadershipItem {
 }
 
 export const INITIAL_MEMBERS: MemberItem[] = [
+  {
+    id: 'admin_nazih',
+    name: 'Ahmed Nazih Nafiz',
+    username: '@nazih',
+    idCard: 'A999999',
+    password: 'admin',
+    role: 'Administrator',
+    crew: 'Administration',
+    email: 'nazihnafiz@gmail.com',
+    phone: '+960 791-2345',
+    badgeRank: 'Portal Administrator',
+    status: 'Active',
+    joinedDate: '2023-01-01',
+    dateOfBirth: '1995-01-01',
+    currentAddress: "Al Madarsathul Arabiyyathul Islamiyya / Boduthakurufaanu Magu / K. Male'",
+    permanentAddress: "Al Madarsathul Arabiyyathul Islamiyya / Boduthakurufaanu Magu / K. Male'",
+    location: "Al Madarsathul Arabiyyathul Islamiyya / Boduthakurufaanu Magu / K. Male'"
+  },
   {
     id: 'm1',
     name: 'Ibrahim Nashidh',
@@ -168,8 +188,51 @@ export const INITIAL_LEADERSHIP: LeadershipItem[] = [
   }
 ];
 
-export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ isAdmin = true, userRole }) => {
-  const [activeTab, setActiveTab] = useState<'crew' | 'leadership' | 'crews'>('crew');
+export const COUNCIL_ROLES_OPTIONS: string[] = [
+  'Chairperson',
+  'Vice Chairperson',
+  'Council Secretary',
+  'Council Treasurer',
+  'Council Quartermaster',
+  'Progress Coordinator',
+  'Event Coordinator',
+  'Media Coordinator',
+  'Policy Committee Member',
+  'Media & PR Committee Member',
+  'Advisor to Chairperson',
+  'Rover Advisor',
+  'Council Member'
+];
+
+export const NON_COUNCIL_ROLES_OPTIONS: string[] = [
+  'Rover Scout',
+  'Explorer Scout',
+  'Senior Rover Scout',
+  'Rover Citizen',
+  'Crew Leader',
+  'Assistant Crew Leader',
+  'Initiate',
+  'Crew Member'
+];
+
+export const isExecutiveOrCouncilRole = (roleStr?: string): boolean => {
+  if (!roleStr) return false;
+  const r = roleStr.toLowerCase().trim();
+  return (
+    r.includes('council') ||
+    r.includes('chair') ||
+    r.includes('secretary') ||
+    r.includes('treasurer') ||
+    r.includes('quartermaster') ||
+    r.includes('coordinator') ||
+    r.includes('committee') ||
+    r.includes('advisor') ||
+    r === 'administrator'
+  );
+};
+
+export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string, currentUser?: any}> = ({ isAdmin = true, userRole, currentUser }) => {
+  const [activeTab, setActiveTab] = useState<'crew' | 'leadership' | 'crews' | 'organogram'>('crew');
   const [memberCategoryTab, setMemberCategoryTab] = useState<'all' | 'council' | 'rovers' | 'explorers' | 'leaders'>('all');
 
   const [portalSettings, setPortalSettings] = useState({
@@ -181,17 +244,31 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
   const [leaders, setLeaders] = useState<LeadershipItem[]>(INITIAL_LEADERSHIP);
   const [crews, setCrews] = useState<CrewItem[]>([]);
 
-  const canCreateCrew = isAdmin || (userRole && (
-    userRole.toLowerCase().includes('council') || 
-    userRole.toLowerCase().includes('secretary') || 
-    userRole.toLowerCase().includes('treasurer') || 
-    userRole.toLowerCase().includes('quartermaster')
-  ));
+  const uRoleLower = (userRole || '').toLowerCase();
+  const canCreateCrew = isAdmin || isExecutiveOrCouncilRole(userRole);
 
   useEffect(() => {
     const unsubMembers = subscribeToMembers(setMembers, console.error);
     const unsubLeaders = subscribeToLeaders(setLeaders, console.error);
     const unsubCrews = subscribeToCrews(setCrews, console.error);
+
+    const handleAddressSync = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.address) {
+        const newAddr = customEvent.detail.address;
+        const memberId = customEvent.detail.memberId;
+        setMembers(prev => prev.map(m => {
+          if (memberId && m.id === memberId) {
+            return { ...m, location: newAddr, currentAddress: newAddr };
+          }
+          if (!memberId && (m.id === currentUser?.id || (isAdmin && (m.role === 'Administrator' || m.name.includes('Nazih'))))) {
+            return { ...m, location: newAddr, currentAddress: newAddr };
+          }
+          return m;
+        }));
+      }
+    };
+    window.addEventListener('koshaaru_address_updated', handleAddressSync);
 
     // Fetch portal settings for age thresholds
     const fetchSettings = async () => {
@@ -216,8 +293,9 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
       unsubMembers();
       unsubLeaders();
       unsubCrews();
+      window.removeEventListener('koshaaru_address_updated', handleAddressSync);
     };
-  }, []);
+  }, [currentUser, isAdmin]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCrew, setSelectedCrew] = useState('All');
@@ -318,14 +396,14 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
   // Authorization for managing and deleting crews:
   // User request: "If its to be deleted, it needs to be deleted by Council members, or rover advusor, or leader or admin"
   const canManageCrews = isAdmin || Boolean(
-    userRole && (
-      userRole.toLowerCase().includes('council') ||
-      userRole.toLowerCase().includes('advisor') ||
-      userRole.toLowerCase().includes('leader') ||
-      userRole.toLowerCase().includes('admin') ||
-      userRole.toLowerCase().includes('secretary') ||
-      userRole.toLowerCase().includes('treasurer') ||
-      userRole.toLowerCase().includes('quartermaster')
+    uRoleLower && (
+      uRoleLower.includes('council') ||
+      uRoleLower.includes('advisor') ||
+      uRoleLower.includes('leader') ||
+      uRoleLower.includes('admin') ||
+      uRoleLower.includes('secretary') ||
+      uRoleLower.includes('treasurer') ||
+      uRoleLower.includes('quartermaster')
     )
   );
 
@@ -352,7 +430,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
   const [newName, setNewName] = useState('');
   const [newUsername, setNewUsername] = useState('');
   const [newIdCard, setNewIdCard] = useState('');
-  const [newRole, setNewRole] = useState('Normal Rover Member');
+  const [newRole, setNewRole] = useState('Rover Scout');
   const [newCrew, setNewCrew] = useState('Alpha Crew');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
@@ -384,20 +462,42 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
 
   const handleOpenLocationModal = (member: MemberItem) => {
     setLocationMember(member);
-    setNewLocationText(member.location || 'Malé Crew HQ');
+    setNewLocationText(member.location || member.currentAddress || 'Malé Crew HQ');
   };
 
   const handleSaveLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!locationMember || !newLocationText.trim()) return;
 
+    const updatedLoc = newLocationText.trim();
+
     try {
       await updateMember(locationMember.id, {
-        location: newLocationText.trim()
+        location: updatedLoc,
+        currentAddress: updatedLoc
       });
+
+      // Update state locally immediately
+      setMembers(prev => prev.map(m => m.id === locationMember.id ? { ...m, location: updatedLoc, currentAddress: updatedLoc } : m));
+
+      // If active user or admin, synchronize global address cache & header event
+      const isTargetUser = locationMember.id === currentUser?.id || 
+                           locationMember.username === currentUser?.username || 
+                           (isAdmin && (locationMember.id === 'admin_nazih' || locationMember.role === 'Administrator' || locationMember.name.includes('Nazih')));
+
+      if (isTargetUser) {
+        localStorage.setItem('koshaaru_user_address_v1', updatedLoc);
+        window.dispatchEvent(new CustomEvent('koshaaru_address_updated', { 
+          detail: { address: updatedLoc, memberId: locationMember.id } 
+        }));
+      }
+
       setLocationMember(null);
     } catch (err) {
       console.error('Failed to update member location:', err);
+      // Fallback local update
+      setMembers(prev => prev.map(m => m.id === locationMember.id ? { ...m, location: updatedLoc, currentAddress: updatedLoc } : m));
+      setLocationMember(null);
     }
   };
 
@@ -465,7 +565,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
   const handleOpenEditMember = (member: MemberItem) => {
     setEditingMember(member);
     setEditName(member.name);
-    setEditUsername(member.username || '@' + member.name.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+    setEditUsername(member.username || '@' + (member.name || 'member').toLowerCase().replace(/[^a-z0-9_]/g, ''));
     setEditIdCard(member.idCard || '');
     setEditRole(member.role);
     setEditCrew(member.crew);
@@ -646,43 +746,54 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
     }
   };
 
+  const sq = (searchQuery || '').toLowerCase();
+
   const filteredMembers = members.filter(m => {
-    const isCouncil = m.role.toLowerCase().includes('council') || m.role.toLowerCase().includes('secretary') || m.role.toLowerCase().includes('treasurer') || m.role.toLowerCase().includes('quartermaster');
-    const isRover = !isCouncil && (m.section ? m.section === 'Rovers' : m.role.toLowerCase().includes('rover'));
-    const isExplorer = !isCouncil && (m.section ? m.section === 'Explorers' : m.role.toLowerCase().includes('explorer'));
-    const isLeader = !isCouncil && (m.section ? m.section === 'Leaders' : m.role.toLowerCase().includes('leader'));
+    const roleLower = (m.role || '').toLowerCase();
+    const isCouncil = isExecutiveOrCouncilRole(m.role);
+    const isRover = !isCouncil && (m.section ? m.section === 'Rovers' : roleLower.includes('rover'));
+    const isExplorer = !isCouncil && (m.section ? m.section === 'Explorers' : roleLower.includes('explorer'));
+    const isLeader = !isCouncil && (m.section ? m.section === 'Leaders' : roleLower.includes('leader'));
 
     if (memberCategoryTab === 'council' && !isCouncil) return false;
     if (memberCategoryTab === 'rovers' && !isRover) return false;
     if (memberCategoryTab === 'explorers' && !isExplorer) return false;
     if (memberCategoryTab === 'leaders' && !isLeader) return false;
 
-    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          m.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          m.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const nameLower = (m.name || '').toLowerCase();
+    const emailLower = (m.email || '').toLowerCase();
+
+    const matchesSearch = !sq || nameLower.includes(sq) || roleLower.includes(sq) || emailLower.includes(sq);
     const matchesCrew = selectedCrew === 'All' || m.crew === selectedCrew;
     const matchesStatus = selectedStatus === 'All' || m.status === selectedStatus;
     return matchesSearch && matchesCrew && matchesStatus;
   });
 
-  const filteredLeaders = leaders.filter(l =>
-    l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    l.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredLeaders = leaders.filter(l => {
+    const lName = (l.name || '').toLowerCase();
+    const lTitle = (l.title || '').toLowerCase();
+    const lEmail = (l.email || '').toLowerCase();
+    return !sq || lName.includes(sq) || lTitle.includes(sq) || lEmail.includes(sq);
+  });
 
-  const councilCount = members.filter(m => m.role.toLowerCase().includes('council') || m.role.toLowerCase().includes('secretary') || m.role.toLowerCase().includes('treasurer') || m.role.toLowerCase().includes('quartermaster')).length;
+  const councilCount = members.filter(m => isExecutiveOrCouncilRole(m.role)).length;
+
   const roversCount = members.filter(m => {
-    const isC = m.role.toLowerCase().includes('council') || m.role.toLowerCase().includes('secretary') || m.role.toLowerCase().includes('treasurer') || m.role.toLowerCase().includes('quartermaster');
-    return !isC && (m.section ? m.section === 'Rovers' : m.role.toLowerCase().includes('rover'));
+    const r = (m.role || '').toLowerCase();
+    const isC = isExecutiveOrCouncilRole(m.role);
+    return !isC && (m.section ? m.section === 'Rovers' : r.includes('rover'));
   }).length;
+
   const explorersCount = members.filter(m => {
-    const isC = m.role.toLowerCase().includes('council') || m.role.toLowerCase().includes('secretary') || m.role.toLowerCase().includes('treasurer') || m.role.toLowerCase().includes('quartermaster');
-    return !isC && (m.section ? m.section === 'Explorers' : m.role.toLowerCase().includes('explorer'));
+    const r = (m.role || '').toLowerCase();
+    const isC = isExecutiveOrCouncilRole(m.role);
+    return !isC && (m.section ? m.section === 'Explorers' : r.includes('explorer'));
   }).length;
+
   const leadersInMembersCount = members.filter(m => {
-    const isC = m.role.toLowerCase().includes('council') || m.role.toLowerCase().includes('secretary') || m.role.toLowerCase().includes('treasurer') || m.role.toLowerCase().includes('quartermaster');
-    return !isC && (m.section ? m.section === 'Leaders' : m.role.toLowerCase().includes('leader'));
+    const r = (m.role || '').toLowerCase();
+    const isC = isExecutiveOrCouncilRole(m.role);
+    return !isC && (m.section ? m.section === 'Leaders' : r.includes('leader'));
   }).length;
 
   return (
@@ -733,10 +844,10 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
       </div>
 
       {/* Main Tabs Navigation */}
-      <div className="flex border-b border-slate-200 gap-6">
+      <div className="flex overflow-x-auto no-scrollbar border-b border-slate-200 gap-4 sm:gap-6 max-w-full">
         <button
           onClick={() => setActiveTab('crew')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'crew'
               ? 'border-[#800020] text-[#800020]'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -747,7 +858,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
         </button>
         <button
           onClick={() => setActiveTab('leadership')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'leadership'
               ? 'border-[#1e40af] text-[#1e40af]'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -758,7 +869,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
         </button>
         <button
           onClick={() => setActiveTab('crews')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'crews'
               ? 'border-emerald-600 text-emerald-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -767,7 +878,23 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
           <Boxes className="w-4 h-4" />
           Manage Crews ({crews.length})
         </button>
+        <button
+          onClick={() => setActiveTab('organogram')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
+            activeTab === 'organogram'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Network className="w-4 h-4" />
+          Reporting Organogram
+        </button>
       </div>
+
+      {/* Reporting Organogram Tab Content */}
+      {activeTab === 'organogram' && (
+        <OrgChart isAdmin={isAdmin} currentUser={currentUser} />
+      )}
 
       {/* Crews Management Tab Content */}
       {activeTab === 'crews' && (
@@ -844,10 +971,10 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
 
       {/* Sub-tabs for Crew Network (All, Rovers, Explorers, Council) */}
       {activeTab === 'crew' && (
-        <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 w-fit">
+        <div className="flex overflow-x-auto no-scrollbar sm:flex-wrap items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 max-w-full">
           <button
             onClick={() => setMemberCategoryTab('all')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
               memberCategoryTab === 'all'
                 ? 'bg-[#0f1e36] text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -857,7 +984,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
           </button>
           <button
             onClick={() => setMemberCategoryTab('rovers')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
               memberCategoryTab === 'rovers'
                 ? 'bg-[#0f1e36] text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -867,7 +994,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
           </button>
           <button
             onClick={() => setMemberCategoryTab('explorers')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
               memberCategoryTab === 'explorers'
                 ? 'bg-[#0f1e36] text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -877,7 +1004,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
           </button>
           <button
             onClick={() => setMemberCategoryTab('leaders')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
               memberCategoryTab === 'leaders'
                 ? 'bg-[#0f1e36] text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -887,7 +1014,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
           </button>
           <button
             onClick={() => setMemberCategoryTab('council')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
               memberCategoryTab === 'council'
                 ? 'bg-[#0f1e36] text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -956,7 +1083,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
       {activeTab === 'crew' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredMembers.map((member) => {
-            const isCouncil = member.role.toLowerCase().includes('council') || member.role.toLowerCase().includes('secretary') || member.role.toLowerCase().includes('treasurer') || member.role.toLowerCase().includes('quartermaster');
+            const isCouncil = isExecutiveOrCouncilRole(member.role);
             return (
               <div 
                 key={member.id}
@@ -980,7 +1107,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
                         )}
                       </div>
                       <div className="text-xs text-slate-500 font-semibold mb-1">
-                        {member.username || '@' + member.name.toLowerCase().replace(/[^a-z0-9_]/g, '')}
+                        {member.username || '@' + (member.name || 'member').toLowerCase().replace(/[^a-z0-9_]/g, '')}
                       </div>
                       <p className="text-xs font-medium text-[#1e40af]">
                         {member.role}
@@ -1187,7 +1314,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
                           {leader.name}
                         </h3>
                         <div className="text-xs text-slate-500 font-semibold mb-0.5">
-                          {leader.username || '@' + leader.name.toLowerCase().replace(/[^a-z0-9_]/g, '')}
+                          {leader.username || '@' + (leader.name || 'leader').toLowerCase().replace(/[^a-z0-9_]/g, '')}
                         </div>
                         <p className="text-xs font-medium text-[#1e40af]">
                           {leader.title}
@@ -1523,13 +1650,27 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">Role / Assignment</label>
-                    <input
-                      type="text"
-                      required
+                    <select
                       value={editRole}
                       onChange={(e) => setEditRole(e.target.value)}
-                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#1e40af] bg-white"
-                    />
+                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#1e40af] bg-white font-medium"
+                    >
+                      <optgroup label="Executive & Council Roles">
+                        {COUNCIL_ROLES_OPTIONS.map(r => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Crew & General Roles (Non-Council)">
+                        {NON_COUNCIL_ROLES_OPTIONS.map(r => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </optgroup>
+                      {!COUNCIL_ROLES_OPTIONS.includes(editRole) && !NON_COUNCIL_ROLES_OPTIONS.includes(editRole) && editRole && (
+                        <optgroup label="Custom Role">
+                          <option value={editRole}>{editRole}</option>
+                        </optgroup>
+                      )}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">Crew</label>
@@ -1603,7 +1744,7 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 font-medium">
-                    {viewingMember.username || '@' + viewingMember.name.toLowerCase().replace(/[^a-z0-9_]/g, '')} • {viewingMember.role} • {viewingMember.crew}
+                    {viewingMember.username || '@' + (viewingMember.name || 'member').toLowerCase().replace(/[^a-z0-9_]/g, '')} • {viewingMember.role} • {viewingMember.crew}
                   </p>
                 </div>
               </div>
@@ -2397,17 +2538,22 @@ export const MembersPage: React.FC<{isAdmin?: boolean, userRole?: string}> = ({ 
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Council Role (Optional)</label>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Role / Assignment</label>
                     <select
                       value={newRole}
                       onChange={(e) => setNewRole(e.target.value)}
-                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#1e40af] bg-white"
+                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#1e40af] bg-white font-medium"
                     >
-                      <option value="Normal Rover Member">Normal Rover Member</option>
-                      <option value="Council Member">Council Member</option>
-                      <option value="Council Secretary">Council Secretary</option>
-                      <option value="Council Treasurer">Council Treasurer</option>
-                      <option value="Council Quartermaster">Council Quartermaster</option>
+                      <optgroup label="Executive & Council Roles">
+                        {COUNCIL_ROLES_OPTIONS.map(r => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Crew & General Roles (Non-Council)">
+                        {NON_COUNCIL_ROLES_OPTIONS.map(r => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </optgroup>
                     </select>
                   </div>
                 </div>

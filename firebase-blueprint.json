@@ -179,6 +179,24 @@
       "contentSummary": "string",
       "isArchived": "boolean"
     },
+    "governance_organogram": {
+      "__doc__": "Official Governance & Executive Council organogram nodes and assignments",
+      "title": "string",
+      "category": "string",
+      "wing": "string",
+      "description": "string",
+      "electionMethod": "string",
+      "bgClass": "string",
+      "borderClass": "string",
+      "textClass": "string",
+      "badgeClass": "string",
+      "reportsTo": "array",
+      "supervises": "array",
+      "coordinatesWith": "array",
+      "assignedPeople": "array",
+      "order": "number",
+      "isCustom": "boolean"
+    },
     "system": {
       "__doc__": "Global system settings",
       "portal_settings": {

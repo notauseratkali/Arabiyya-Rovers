@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Save, RefreshCcw, UserCog, Clock, Globe, Download, Award, MessageSquare, Send, Sparkles, Check, RotateCcw, Upload, Image as ImageIcon, Trash2, Lock, Unlock, Key } from 'lucide-react';
 import { RoverLogo } from './RoverLogo';
 import { db } from '../firebase';
-import { collection, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { DEFAULT_WELCOME_MESSAGE_DRAFT, sendChatMessage } from '../services/chatService';
 import { getCachedBrandAssets, subscribeToBrandAssets, updateBrandAsset, processPngFile, BrandAssets } from '../services/brandService';
 import { subscribeToPermissions, updatePageAccess, PagePermissions } from '../services/permissionsService';
+import { subscribeToCouncilRoles, saveCouncilRole, deleteCouncilRole, CouncilRole } from '../services/councilRolesService';
 
 export interface PortalSettings {
   explorerToRoverAge: number;
@@ -35,6 +36,11 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
 
   const [permissionsList, setPermissionsList] = useState<PagePermissions[]>([]);
   const [membersList, setMembersList] = useState<{ id: string; name: string; role: string; crew: string }[]>([]);
+  const [councilRoles, setCouncilRoles] = useState<CouncilRole[]>([]);
+  const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false);
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [roleNameInput, setRoleNameInput] = useState('');
+  const [assignedRoverInput, setAssignedRoverInput] = useState('');
 
   useEffect(() => {
     const unsub = subscribeToBrandAssets((assets) => {
@@ -43,6 +49,10 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
 
     const unsubPerms = subscribeToPermissions((perms) => {
       setPermissionsList(perms);
+    });
+
+    const unsubCouncil = subscribeToCouncilRoles((roles) => {
+      setCouncilRoles(roles);
     });
 
     const fetchMembers = async () => {
@@ -74,6 +84,7 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
     return () => {
       unsub();
       unsubPerms();
+      unsubCouncil();
     };
   }, []);
 
@@ -86,6 +97,66 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
     { id: 'records', name: 'Records Archive', desc: 'Official Documents & Logs' },
   ];
 
+  const handleOpenAddRole = () => {
+    setEditingRoleId(null);
+    setRoleNameInput('');
+    setAssignedRoverInput('');
+    setIsAddRoleModalOpen(true);
+  };
+
+  const handleEditRole = (role: CouncilRole) => {
+    setEditingRoleId(role.id);
+    setRoleNameInput(role.roleName);
+    if (role.assignedRoverName) {
+      const match = membersList.find(m => m.name === role.assignedRoverName);
+      if (match) {
+        setAssignedRoverInput(`${match.name} (${match.crew})`);
+      } else {
+        setAssignedRoverInput(role.assignedRoverName + (role.crew ? ` (${role.crew})` : ''));
+      }
+    } else {
+      setAssignedRoverInput('');
+    }
+    setIsAddRoleModalOpen(true);
+  };
+
+  const handleSaveRoleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roleNameInput.trim()) return;
+
+    let roverName = '';
+    let crewName = '';
+    if (assignedRoverInput) {
+      const parts = assignedRoverInput.split(' (');
+      roverName = parts[0];
+      crewName = parts[1] ? parts[1].replace(')', '') : '';
+    }
+
+    try {
+      await saveCouncilRole({
+        id: editingRoleId || ('cr_' + Date.now().toString()),
+        roleName: roleNameInput.trim(),
+        assignedRoverName: roverName,
+        crew: crewName
+      });
+      setIsAddRoleModalOpen(false);
+      setRoleNameInput('');
+      setAssignedRoverInput('');
+    } catch (err) {
+      alert('Failed to save Council Member Role.');
+    }
+  };
+
+  const handleDeleteRoleSubmit = async (id: string, roleName: string) => {
+    if (!confirm(`Are you sure you want to delete the council role "${roleName}"?`)) return;
+    try {
+      await deleteCouncilRole(id);
+      alert('Council role deleted successfully.');
+    } catch (err) {
+      alert('Failed to delete role.');
+    }
+  };
+
   const handleTogglePageAccess = async (memberId: string, memberName: string, pageId: string, currentAccess: boolean) => {
     try {
       await updatePageAccess(memberId, memberName, pageId, !currentAccess);
@@ -97,14 +168,14 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
   const handleGrantAllCouncil = async () => {
     try {
       for (const m of membersList) {
-        const isCouncilOrLeader = m.role.toLowerCase().includes('council') || 
-                                  m.role.toLowerCase().includes('secretary') || 
-                                  m.role.toLowerCase().includes('treasurer') || 
-                                  m.role.toLowerCase().includes('quartermaster') || 
-                                  m.role.toLowerCase().includes('advisor') || 
-                                  m.role.toLowerCase().includes('chairperson') || 
-                                  m.role.toLowerCase().includes('admin') || 
-                                  m.role.toLowerCase().includes('leader');
+        const isCouncilOrLeader = m.role?.toLowerCase().includes('council') || 
+                                  m.role?.toLowerCase().includes('secretary') || 
+                                  m.role?.toLowerCase().includes('treasurer') || 
+                                  m.role?.toLowerCase().includes('quartermaster') || 
+                                  m.role?.toLowerCase().includes('advisor') || 
+                                  m.role?.toLowerCase().includes('chairperson') || 
+                                  m.role?.toLowerCase().includes('admin') || 
+                                  m.role?.toLowerCase().includes('leader');
         if (isCouncilOrLeader) {
           const docRef = doc(db, 'page_permissions', m.id);
           await setDoc(docRef, {
@@ -124,7 +195,7 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.includes('png') && !file.name.toLowerCase().endsWith('.png')) {
+    if (!file.type.includes('png') && !file.name?.toLowerCase().endsWith('.png')) {
       alert('Only PNG image files (.png) are supported for logo uploads.');
       e.target.value = '';
       return;
@@ -156,28 +227,25 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
   };
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const docRef = doc(db, 'system', 'portal_settings');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setSettings({
-            explorerToRoverAge: data.explorerToRoverAge ?? 18,
-            roverToLeaderAge: data.roverToLeaderAge ?? 26,
-            portalName: data.portalName || 'Koshaaru Portal',
-            portalTagline: data.portalTagline || 'Arabiyya Beyond Limits',
-            welcomeMessageEnabled: data.welcomeMessageEnabled ?? true,
-            welcomeMessageDraft: data.welcomeMessageDraft || DEFAULT_WELCOME_MESSAGE_DRAFT
-          });
-        }
-      } catch (err) {
-        console.error('Error fetching settings:', err);
-      } finally {
-        setLoading(false);
+    const docRef = doc(db, 'system', 'portal_settings');
+    const unsub = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setSettings({
+          explorerToRoverAge: data.explorerToRoverAge ?? 18,
+          roverToLeaderAge: data.roverToLeaderAge ?? 26,
+          portalName: data.portalName || 'Koshaaru Portal',
+          portalTagline: data.portalTagline || 'Arabiyya Beyond Limits',
+          welcomeMessageEnabled: data.welcomeMessageEnabled ?? true,
+          welcomeMessageDraft: data.welcomeMessageDraft || DEFAULT_WELCOME_MESSAGE_DRAFT
+        });
       }
-    };
-    fetchSettings();
+      setLoading(false);
+    }, (err) => {
+      console.error('Error fetching settings:', err);
+      setLoading(false);
+    });
+    return () => unsub();
   }, []);
 
   const handleSave = async () => {
@@ -697,6 +765,164 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
         </div>
       </div>
 
+      {/* Council Member Roles Section */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 flex items-center justify-center shrink-0">
+              <UserCog className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-bold text-slate-800">Council Member Roles</h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-800">
+                  Made by Advisor or Admin
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Define and manage specialized Council Member Roles. These roles determine portal page accessibility for members holding them.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenAddRole}
+            disabled={!isAdmin}
+            className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            + Create Council Role
+          </button>
+        </div>
+
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {councilRoles.map(role => (
+            <div key={role.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h4 className="font-bold text-[#0f1e36] text-sm">{role.roleName}</h4>
+                  {role.assignedRoverName ? (
+                    <div className="text-xs font-semibold text-purple-700 flex items-center gap-1 mt-0.5">
+                      <span>{role.assignedRoverName}</span>
+                      {role.crew && <span className="text-slate-400 font-normal">({role.crew})</span>}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-amber-600 italic mt-0.5">Unassigned Seat</div>
+                  )}
+                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleEditRole(role)}
+                      className="px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRoleSubmit(role.id, role.roleName)}
+                      className="px-2.5 py-1 text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Add / Edit Council Role Modal */}
+      {isAddRoleModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
+            <h3 className="font-bold text-slate-800 text-base">
+              {editingRoleId ? 'Edit Council Member Role' : 'Create Council Member Role'}
+            </h3>
+            <p className="text-xs text-slate-500">
+              Only Administrators and Rover Advisors can create or configure Council Member Roles.
+            </p>
+
+            <form onSubmit={handleSaveRoleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Role Title</label>
+                <input
+                  type="text"
+                  required
+                  list="organogram-role-presets"
+                  value={roleNameInput}
+                  onChange={(e) => setRoleNameInput(e.target.value)}
+                  placeholder="e.g. Council Secretary"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                />
+                <datalist id="organogram-role-presets">
+                  <option value="Rover Advisor" />
+                  <option value="Chairperson" />
+                  <option value="Vice Chairperson" />
+                  <option value="Council Secretary" />
+                  <option value="Council Treasurer" />
+                  <option value="Council Quartermaster" />
+                  <option value="Progress Coordinator" />
+                  <option value="Event Coordinator" />
+                  <option value="Media Coordinator" />
+                  <option value="Policy Committee Member" />
+                  <option value="Media & PR Committee Member" />
+                  <option value="Advisor to Chairperson" />
+                </datalist>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {['Chairperson', 'Vice Chairperson', 'Council Secretary', 'Council Treasurer', 'Council Quartermaster', 'Progress Coordinator', 'Event Coordinator', 'Media Coordinator'].map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setRoleNameInput(p)}
+                      className="px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-medium transition-colors cursor-pointer"
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Assign Rover Scout Member (Optional)</label>
+                <select
+                  value={assignedRoverInput}
+                  onChange={(e) => setAssignedRoverInput(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/20 text-slate-800 font-medium"
+                >
+                  <option value="">-- No Member Assigned (Unassigned) --</option>
+                  {membersList.map((m) => {
+                    const val = `${m.name} (${m.crew})`;
+                    return (
+                      <option key={m.id} value={val}>
+                        {m.name} - {m.crew}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddRoleModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-colors shadow-xs"
+                >
+                  Save Role
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Permissions & Page Access Section */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -712,7 +938,7 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                Manage which members have access to view specific portal pages in their dashboard. Access is granted by Admin, Rover Advisor, or Chairperson.
+                Manage which council roles have access to view specific portal pages in their dashboard. Access is granted by Admin, Rover Advisor, or Chairperson.
               </p>
             </div>
           </div>
@@ -723,10 +949,10 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
               disabled={!isAdmin}
               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
             >
-              Grant All Council Access
+              Grant All Role Access
             </button>
             <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">
-              {membersList.length} Members Managed
+              {councilRoles.length} Roles Managed
             </span>
           </div>
         </div>
@@ -735,7 +961,7 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-700">
-                <th className="p-3 font-bold uppercase tracking-wider w-48">Member Name & Role</th>
+                <th className="p-3 font-bold uppercase tracking-wider w-48">Council Member Role</th>
                 {PAGES_CONFIG.map(page => (
                   <th key={page.id} className="p-3 font-bold text-center uppercase tracking-wider">
                     <div>{page.name}</div>
@@ -745,29 +971,15 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {membersList.map(member => {
-                const memberPerms = permissionsList.find(p => p.memberId === member.id || p.memberName.toLowerCase() === member.name.toLowerCase());
-                
-                const isCouncilOrLeader = member.role.toLowerCase().includes('council') || 
-                                          member.role.toLowerCase().includes('secretary') || 
-                                          member.role.toLowerCase().includes('treasurer') || 
-                                          member.role.toLowerCase().includes('quartermaster') || 
-                                          member.role.toLowerCase().includes('advisor') || 
-                                          member.role.toLowerCase().includes('chairperson') || 
-                                          member.role.toLowerCase().includes('admin') || 
-                                          member.role.toLowerCase().includes('leader');
-
-                const defaultPages = isCouncilOrLeader 
-                  ? ['governance', 'finance', 'progress', 'events', 'media', 'records']
-                  : ['progress', 'events', 'media'];
-
-                const grantedPages = memberPerms ? memberPerms.grantedPages : defaultPages;
+              {councilRoles.map(role => {
+                const rolePerms = permissionsList.find(p => p.memberId === role.id || p.memberName?.toLowerCase() === role.roleName?.toLowerCase());
+                const grantedPages = rolePerms ? rolePerms.grantedPages : ['governance', 'finance', 'progress', 'events', 'media', 'records'];
 
                 return (
-                  <tr key={member.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr key={role.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3 align-middle">
-                      <div className="font-bold text-[#0f1e36]">{member.name}</div>
-                      <div className="text-[11px] text-slate-500">{member.role} • {member.crew}</div>
+                      <div className="font-bold text-[#0f1e36]">{role.roleName}</div>
+                      <div className="text-[11px] text-slate-500">{role.description || 'Council Role'}</div>
                     </td>
                     {PAGES_CONFIG.map(page => {
                       const hasAccess = grantedPages.includes(page.id);
@@ -775,7 +987,7 @@ export const SettingsPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
                         <td key={page.id} className="p-3 text-center align-middle">
                           <button
                             type="button"
-                            onClick={() => handleTogglePageAccess(member.id, member.name, page.id, hasAccess)}
+                            onClick={() => handleTogglePageAccess(role.id, role.roleName, page.id, hasAccess)}
                             disabled={!isAdmin}
                             title={isAdmin ? 'Click to toggle access' : 'Only Admin, Advisor, or Chairperson can modify permissions'}
                             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all cursor-pointer shadow-2xs ${

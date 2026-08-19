@@ -19,10 +19,11 @@ import { EventsPage } from './components/EventsPage';
 import { MediaPage } from './components/MediaPage';
 import { RecordsPage } from './components/RecordsPage';
 import { SettingsPage } from './components/SettingsPage';
+import { CoursesPage } from './components/CoursesPage';
 import { AccessRestricted } from './components/AccessRestricted';
 import { NotificationListener } from './components/NotificationListener';
 import { subscribeToPermissions, PagePermissions } from './services/permissionsService';
-import { NavSection, NoteItem } from './types';
+import { NavSection, NoteItem, NoteStatus } from './types';
 import { INITIAL_NOTES } from './data/initialNotes';
 import { 
   subscribeToNotes, 
@@ -34,19 +35,15 @@ import { updateMemberPresence } from './services/membersService';
 
 import { Login } from './components/Login';
 import { ChangePassword } from './components/ChangePassword';
+import { PageLoader } from './components/PageLoader';
+import { RoverLogo } from './components/RoverLogo';
 import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
-import app from './firebase';
+import app, { db } from './firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 const auth = getAuth(app);
 
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  'Council Secretary': ['governance', 'events', 'media', 'records'],
-  'Council Treasurer': ['finance'],
-  'Council Quartermaster': ['progress', 'records'],
-  'Secretary': ['governance', 'events', 'media', 'records'],
-  'Treasurer': ['finance'],
-  'Quartermaster': ['progress', 'records'],
-};
+
 
 const STORAGE_KEY = 'koshaaru_portal_rover_notes_v1';
 
@@ -55,10 +52,35 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [pagePermissions, setPagePermissions] = useState<PagePermissions[]>([]);
 
+  const [isPageLoading, setIsPageLoading] = useState<boolean>(true);
+  const [loadingMessage, setLoadingMessage] = useState<string>('Initializing Portal...');
+  const [isContentReady, setIsContentReady] = useState<boolean>(false);
+  const [loaderKey, setLoaderKey] = useState<number>(1);
+
+  const getSectionLoadingMessage = (section: NavSection): string => {
+    switch (section) {
+      case 'dashboard': return 'Loading Dashboard Overview...';
+      case 'notebook': return 'Loading Notebook & Patrol Logbook...';
+      case 'members': return 'Loading Member Directory & Profiles...';
+      case 'chat': return 'Opening Chat & Patrol Messages...';
+      case 'announcements': return 'Loading Official Announcements...';
+      case 'governance': return 'Loading Governance & Patrol Council...';
+      case 'finance': return 'Loading Financial Records & Budgets...';
+      case 'progress': return 'Loading Scout Progress & Advancements...';
+      case 'events': return 'Loading Event Calendar & Attendance...';
+      case 'media': return 'Loading Media Gallery & Downloads...';
+      case 'records': return 'Loading Official Patrol Records...';
+      case 'settings': return 'Loading System Settings...';
+      case 'courses': return 'Loading Courses, Schemes & Badges...';
+      default: return 'Loading Page Content...';
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
+      setIsContentReady(true);
     });
     return () => unsubscribe();
   }, []);
@@ -109,9 +131,9 @@ export default function App() {
   const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
   const [portalName, setPortalName] = useState<string>(() => {
     try {
-      return localStorage.getItem('koshaaru_portal_name_v1') || 'Koshaaru Portal';
+      return localStorage.getItem('koshaaru_portal_name_v1') || 'Arabiyya Rover Network';
     } catch {
-      return 'Koshaaru Portal';
+      return 'Arabiyya Rover Network';
     }
   });
 
@@ -124,43 +146,46 @@ export default function App() {
   });
 
   useEffect(() => {
-    const fetchBranding = async () => {
-      try {
-        const { doc, getDoc } = await import('firebase/firestore');
-        const { db } = await import('./firebase');
-        const docRef = doc(db, 'system', 'portal_settings');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.portalName) setPortalName(data.portalName);
-          if (data.portalTagline) setPortalTagline(data.portalTagline);
+    const docRef = doc(db, 'system', 'portal_settings');
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.portalName) {
+          setPortalName(data.portalName);
+          localStorage.setItem('koshaaru_portal_name_v1', data.portalName);
         }
-      } catch (err) {
-        console.error('Error fetching branding settings:', err);
+        if (data.portalTagline) {
+          setPortalTagline(data.portalTagline);
+          localStorage.setItem('koshaaru_portal_tagline_v1', data.portalTagline);
+        }
       }
-    };
-    fetchBranding();
+    }, (err) => {
+      console.error('Error subscribing to portal settings:', err);
+    });
+    return () => unsubscribe();
   }, []);
 
   const [isAdmin, setIsAdmin] = useState<boolean>(true);
 
-  const handleUpdatePortalName = (newName: string) => {
-    const trimmed = newName.trim() || 'Koshaaru Portal';
+  const handleUpdatePortalName = async (newName: string) => {
+    const trimmed = newName.trim() || 'Arabiyya Rover Network';
     setPortalName(trimmed);
     try {
       localStorage.setItem('koshaaru_portal_name_v1', trimmed);
+      await setDoc(doc(db, 'system', 'portal_settings'), { portalName: trimmed }, { merge: true });
     } catch (e) {
-      console.error('Failed to save portal name to localStorage:', e);
+      console.error('Failed to save portal name:', e);
     }
   };
 
-  const handleUpdatePortalTagline = (newTagline: string) => {
+  const handleUpdatePortalTagline = async (newTagline: string) => {
     const trimmed = newTagline.trim() || 'Arabiyya Beyond Limits';
     setPortalTagline(trimmed);
     try {
       localStorage.setItem('koshaaru_portal_tagline_v1', trimmed);
+      await setDoc(doc(db, 'system', 'portal_settings'), { portalTagline: trimmed }, { merge: true });
     } catch (e) {
-      console.error('Failed to save portal tagline to localStorage:', e);
+      console.error('Failed to save portal tagline:', e);
     }
   };
 
@@ -238,19 +263,29 @@ export default function App() {
 
   const handleSelectSection = (section: NavSection) => {
     setIsEditorOpen(false);
-    setCurrentSection(section);
+    if (section !== currentSection) {
+      setLoadingMessage(getSectionLoadingMessage(section));
+      setLoaderKey((prev) => prev + 1);
+      setIsContentReady(true);
+      setIsPageLoading(true);
+      setCurrentSection(section);
+    }
   };
 
   const handleCreateNote = () => {
     setEditingNote(null);
+    if (currentSection !== 'notebook') {
+      setCurrentSection('notebook');
+    }
     setIsEditorOpen(true);
-    setCurrentSection('notebook');
   };
 
   const handleEditNote = (note: NoteItem) => {
     setEditingNote(note);
+    if (currentSection !== 'notebook') {
+      setCurrentSection('notebook');
+    }
     setIsEditorOpen(true);
-    setCurrentSection('notebook');
   };
 
   const handleSaveNote = async (savedNote: NoteItem) => {
@@ -265,6 +300,7 @@ export default function App() {
         updated = [savedNote, ...prevNotes];
       }
       try {
+        localStorage.setItem(`${STORAGE_KEY}_${activeUserId}`, JSON.stringify(updated));
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       } catch (e) {
         console.error('Failed to persist to localStorage:', e);
@@ -272,13 +308,14 @@ export default function App() {
       return updated;
     });
     setIsEditorOpen(false);
+    setEditingNote(null);
 
     // Save to Firestore (queued in offline cache or synced immediately)
     try {
       await saveNoteToFirestore(activeUserId, savedNote);
       setSyncStatus('synced');
     } catch (err) {
-      console.warn('Note saved to local cache; will sync when connection permits.');
+      console.info('Note cached locally; will synchronize with Cloud when online.');
       setSyncStatus('synced');
     }
   };
@@ -322,7 +359,7 @@ export default function App() {
         if (n.id === noteId) {
           return {
             ...n,
-            status: nextStatus,
+            status: nextStatus as NoteStatus,
             updatedAt: new Date().toISOString(),
           };
         }
@@ -347,6 +384,10 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    setLoadingMessage('Logging Out...');
+    setLoaderKey((prev) => prev + 1);
+    setIsContentReady(true);
+    setIsPageLoading(true);
     try {
       await auth.signOut();
     } catch (e) {
@@ -356,6 +397,10 @@ export default function App() {
   };
 
   const toggleAdmin = () => {
+    setLoadingMessage('Switching Admin View...');
+    setLoaderKey((prev) => prev + 1);
+    setIsContentReady(true);
+    setIsPageLoading(true);
     setIsAdmin((prev) => {
       const next = !prev;
       if (!next && currentSection === 'settings') {
@@ -370,24 +415,21 @@ export default function App() {
     if (isAdmin) return false;
 
     // Rover Advisor has full access
-    const isAdvisor = user?.role?.toLowerCase().includes('advisor') || user?.title?.toLowerCase().includes('advisor') || user?.name?.toLowerCase().includes('ziyad');
+    const isAdvisor = (user?.role || '').toLowerCase().includes('advisor') || (user?.title || '').toLowerCase().includes('advisor') || (user?.name || '').toLowerCase().includes('ziyad');
     if (isAdvisor) return false;
+
+    const userRoleLower = (user?.role || '').toLowerCase();
 
     // Governance page is strictly restricted for normal members (only accessible to council members, admin/advisors)
     if (section === 'governance') {
-      const isCouncil = user?.role?.toLowerCase().includes('council') || user?.role?.toLowerCase().includes('secretary') || user?.role?.toLowerCase().includes('treasurer') || user?.role?.toLowerCase().includes('quartermaster') || user?.role?.toLowerCase().includes('coordinator') || user?.role?.toLowerCase().includes('leader');
+      const isCouncil = userRoleLower.includes('council') || userRoleLower.includes('secretary') || userRoleLower.includes('treasurer') || userRoleLower.includes('quartermaster') || userRoleLower.includes('coordinator') || userRoleLower.includes('leader');
       
       // Check explicit permissions
       let hasExplicitPermission = false;
       if (user?.role) {
-        const rolePerm = pagePermissions.find((p) => p.memberId.toLowerCase() === user.role.toLowerCase());
+        const rolePerm = pagePermissions.find((p) => (p.memberId && p.memberId.toLowerCase() === userRoleLower) || (p.memberName && p.memberName.toLowerCase() === userRoleLower));
         if (rolePerm) {
           if (rolePerm.grantedPages.includes('governance')) {
-            hasExplicitPermission = true;
-          }
-        } else {
-          const defaultPerms = DEFAULT_ROLE_PERMISSIONS[user.role];
-          if (defaultPerms && defaultPerms.includes('governance')) {
             hasExplicitPermission = true;
           }
         }
@@ -405,20 +447,15 @@ export default function App() {
     }
 
     // These pages are always unrestricted
-    if (['dashboard', 'chat', 'announcements', 'notebook', 'members', 'settings'].includes(section)) {
+    if (['dashboard', 'chat', 'announcements', 'notebook', 'members', 'courses', 'settings'].includes(section)) {
       return false;
     }
 
     // Check permissions
     if (user?.role) {
-      const rolePerm = pagePermissions.find((p) => p.memberId.toLowerCase() === user.role.toLowerCase());
+      const rolePerm = pagePermissions.find((p) => (p.memberId && p.memberId.toLowerCase() === userRoleLower) || (p.memberName && p.memberName.toLowerCase() === userRoleLower));
       if (rolePerm) {
         if (rolePerm.grantedPages.includes(section)) {
-          return false;
-        }
-      } else {
-        const defaultPerms = DEFAULT_ROLE_PERMISSIONS[user.role];
-        if (defaultPerms && defaultPerms.includes(section)) {
           return false;
         }
       }
@@ -430,32 +467,74 @@ export default function App() {
   const draftsCount = notes.filter((n) => n.status === 'draft').length;
 
   if (authLoading) {
-    return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="w-8 h-8 border-4 border-[#800020] border-t-transparent rounded-full animate-spin"></div></div>;
+    return (
+      <PageLoader 
+        key={loaderKey}
+        minDurationMs={2000}
+        isReady={!authLoading}
+        onComplete={() => setIsPageLoading(false)}
+      />
+    );
   }
 
   if (!user) {
     return (
-      <Login 
-        onLoginSuccess={(memberData) => {
-          if (memberData) {
-            setUser(memberData);
-            setIsAdmin(false);
-          }
-        }} 
-        portalName={portalName} 
-        portalTagline={portalTagline} 
-      />
+      <>
+        {isPageLoading && (
+          <PageLoader 
+            key={loaderKey}
+            minDurationMs={2000}
+            isReady={isContentReady}
+            onComplete={() => setIsPageLoading(false)}
+          />
+        )}
+        <Login 
+          onLoginSuccess={(memberData) => {
+            setLoadingMessage('Authenticating Member & Loading Portal...');
+            setLoaderKey((prev) => prev + 1);
+            setIsContentReady(true);
+            setIsPageLoading(true);
+            if (memberData) {
+              setUser(memberData);
+              setIsAdmin(false);
+            } else {
+              setIsAdmin(true);
+            }
+          }} 
+          portalName={portalName} 
+          portalTagline={portalTagline} 
+        />
+      </>
     );
   }
 
   // Handle member forced password change
   if (user && user.password === '123456') {
-    return <ChangePassword member={user} onComplete={(updatedMember) => setUser(updatedMember)} />;
+    return (
+      <ChangePassword 
+        member={user} 
+        onComplete={(updatedMember) => {
+          setLoadingMessage('Updating Member Account & Loading Portal...');
+          setLoaderKey((prev) => prev + 1);
+          setIsContentReady(true);
+          setIsPageLoading(true);
+          setUser(updatedMember);
+        }} 
+      />
+    );
   }
 
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
+      {isPageLoading && (
+        <PageLoader 
+          key={loaderKey}
+          minDurationMs={2000}
+          isReady={isContentReady}
+          onComplete={() => setIsPageLoading(false)}
+        />
+      )}
       <NotificationListener 
         currentUserId={activeUserId} 
         onNavigate={handleSelectSection}
@@ -476,6 +555,7 @@ export default function App() {
         portalTagline={portalTagline}
         onLogout={handleLogout}
         currentUser={user}
+        pagePermissions={pagePermissions}
       />
 
       {/* Main Content Area */}
@@ -497,8 +577,13 @@ export default function App() {
           {isEditorOpen ? (
             <NoteEditor
               note={editingNote}
+              currentUser={user}
+              isAdmin={isAdmin}
               onSave={handleSaveNote}
-              onCancel={() => setIsEditorOpen(false)}
+              onCancel={() => {
+                setIsEditorOpen(false);
+                setEditingNote(null);
+              }}
               onDelete={handleDeleteNote}
             />
           ) : isSectionRestricted(currentSection) ? (
@@ -521,7 +606,9 @@ export default function App() {
               onToggleStatus={handleToggleStatus}
             />
           ) : currentSection === 'members' ? (
-            <MembersPage isAdmin={isAdmin} userRole={user?.role} />
+            <MembersPage isAdmin={isAdmin} userRole={user?.role} currentUser={user} />
+          ) : currentSection === 'courses' ? (
+            <CoursesPage isAdmin={isAdmin} currentUser={user} pagePermissions={pagePermissions} />
           ) : currentSection === 'governance' ? (
             <GovernancePage isAdmin={isAdmin} pagePermissions={pagePermissions} />
           ) : currentSection === 'finance' ? (
@@ -541,15 +628,12 @@ export default function App() {
               currentSection={currentSection}
               onNavigateTo={handleSelectSection}
               notes={notes}
-              onCreateNote={handleCreateNote}
-              onEditNote={handleEditNote}
               portalName={portalName}
               portalTagline={portalTagline}
               onUpdatePortalName={handleUpdatePortalName}
               onUpdatePortalTagline={handleUpdatePortalTagline}
               isAdmin={isAdmin}
               currentUser={user}
-              pagePermissions={pagePermissions}
             />
           )}
         </main>

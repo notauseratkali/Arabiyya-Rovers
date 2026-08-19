@@ -18,15 +18,6 @@ import { collection, addDoc, getDocs, onSnapshot, query, orderBy, updateDoc, doc
 import { db } from '../firebase';
 import { PagePermissions } from '../services/permissionsService';
 
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  'Council Secretary': ['governance', 'events', 'media', 'records'],
-  'Council Treasurer': ['finance'],
-  'Council Quartermaster': ['progress', 'records'],
-  'Secretary': ['governance', 'events', 'media', 'records'],
-  'Treasurer': ['finance'],
-  'Quartermaster': ['progress', 'records'],
-};
-
 interface EventItem {
   id: string;
   title: string;
@@ -53,10 +44,7 @@ export const EventsPage: React.FC<{
 }) => {
   const currentRole = isAdmin ? 'Administrator' : userRole;
 
-  // Active simulated role for testing
-  const [simulatedRole, setSimulatedRole] = useState<string>(currentRole);
-
-  const [activeTab, setActiveTab] = useState<'calendar' | 'planning' | 'reports'>('calendar');
+    const [activeTab, setActiveTab] = useState<'calendar' | 'planning' | 'reports'>('calendar');
   
   // States
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -90,7 +78,7 @@ export const EventsPage: React.FC<{
       setEvents(evs);
       setLoading(false);
     }, (error) => {
-      console.warn('Fallback calendar state:', error);
+      console.error("Firebase sync error", error);
       setEvents([
         { id: '1', title: 'Annual Crew Leader Training Weekend', date: '2026-08-22', time: '08:00', location: 'Fihalhohi Basecamp', type: 'Camp', description: 'Intensive pioneering, crew leadership, and crisis navigation drills.', budgetRequested: 2500, budgetApproved: true, equipmentRequired: ['Tents (x4)', 'Spliced rope coils', 'First-aid box (large)'], status: 'Approved' },
         { id: '2', title: 'Rover Squire Investiture Ceremony', date: '2026-08-29', time: '18:00', location: 'Council HQ Hall', type: 'Ceremonial', description: 'Investiture of newly selected squires into Abu Bakr Crew.', budgetRequested: 800, budgetApproved: true, equipmentRequired: ['Investiture scarves', 'Portal banner', 'Refreshments kit'], status: 'Planning' },
@@ -147,12 +135,7 @@ export const EventsPage: React.FC<{
       setIsPlanOpen(false);
       setETitle('');
       setEEquip([]);
-    } catch (err) {
-      setEvents(prev => [...prev, { id: Date.now().toString(), ...eventData } as EventItem]);
-      setIsPlanOpen(false);
-      setETitle('');
-      setEEquip([]);
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleApproveBudget = async (id: string) => {
@@ -161,9 +144,7 @@ export const EventsPage: React.FC<{
         budgetApproved: true,
         status: 'Approved'
       });
-    } catch (err) {
-      setEvents(prev => prev.map(e => e.id === id ? { ...e, budgetApproved: true, status: 'Approved' } : e));
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleCreateReport = async (e: React.FormEvent) => {
@@ -191,13 +172,10 @@ export const EventsPage: React.FC<{
       setRepEval('');
       setRepCount('');
       setRepList('');
-    } catch (err) {
-      setEvents(prev => prev.map(ev => ev.id === reportingEvent.id ? { ...ev, status: 'Completed', reportSubmitted: true } : ev));
-      setReportingEvent(null);
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
-  const simulatedRolesList = [
+  const currentRolesList = [
     'Quartermaster',
     'Event Coordinator',
     'Treasurer',
@@ -205,14 +183,13 @@ export const EventsPage: React.FC<{
     'Administrator'
   ];
 
-  const isAdvisor = simulatedRole.toLowerCase().includes('advisor') || 
-                    simulatedRole.toLowerCase().includes('administrator') || 
-                    simulatedRole.toLowerCase().includes('ziyad');
+  const isAdvisor = currentRole?.toLowerCase().includes('advisor') || 
+                    currentRole?.toLowerCase().includes('administrator') || 
+                    currentRole?.toLowerCase().includes('ziyad');
 
   const hasRolePermission = pagePermissions?.some(p => 
-    p.memberId.toLowerCase() === simulatedRole.toLowerCase() && p.grantedPages.includes('events')
-  ) || (!pagePermissions?.some(p => p.memberId.toLowerCase() === simulatedRole.toLowerCase()) && 
-        DEFAULT_ROLE_PERMISSIONS[simulatedRole]?.includes('events'));
+    p.memberId?.toLowerCase() === currentRole?.toLowerCase() && p.grantedPages.includes('events')
+  );
 
   const actualHasAccess = isAdvisor || hasRolePermission;
 
@@ -228,19 +205,7 @@ export const EventsPage: React.FC<{
           <p className="text-xs text-slate-500">Plan monthly social & recreational events, manage equipment lists, and submit budget requests.</p>
         </div>
 
-        {/* Simulator Selector */}
-        <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 shrink-0">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Simulate Role:</span>
-          <select
-            value={simulatedRole}
-            onChange={(e) => setSimulatedRole(e.target.value)}
-            className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 focus:outline-none"
-          >
-            {simulatedRolesList.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
+        
       </div>
 
       {/* Role Access Info Banner for Normal Members */}
@@ -257,16 +222,10 @@ export const EventsPage: React.FC<{
               </p>
             </div>
           </div>
-          <button 
-            onClick={() => setSimulatedRole('Event Coordinator')}
-            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition-colors cursor-pointer shrink-0"
-          >
-            Impersonate Coordinator
-          </button>
         </div>
       )}
 
-      <>
+
           {/* Tabs */}
           <div className="flex border-b border-slate-200 gap-1.5 bg-slate-100/55 p-1 rounded-xl max-w-lg">
             <button
@@ -468,7 +427,7 @@ export const EventsPage: React.FC<{
               </div>
             </div>
           )}
-        </>
+  
 
       {/* Plan New Event Modal */}
       {isPlanOpen && (

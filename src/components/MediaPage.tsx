@@ -21,15 +21,6 @@ import { collection, addDoc, getDocs, onSnapshot, query, orderBy, deleteDoc, doc
 import { db } from '../firebase';
 import { PagePermissions } from '../services/permissionsService';
 
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  'Council Secretary': ['governance', 'events', 'media', 'records'],
-  'Council Treasurer': ['finance'],
-  'Council Quartermaster': ['progress', 'records'],
-  'Secretary': ['governance', 'events', 'media', 'records'],
-  'Treasurer': ['finance'],
-  'Quartermaster': ['progress', 'records'],
-};
-
 interface MediaPost {
   id: string;
   title: string;
@@ -71,10 +62,7 @@ export const MediaPage: React.FC<{
 }) => {
   const currentRole = isAdmin ? 'Administrator' : userRole;
 
-  // Active simulated role for testing
-  const [simulatedRole, setSimulatedRole] = useState<string>(currentRole);
-
-  const [activeTab, setActiveTab] = useState<'calendar' | 'archive' | 'sync'>('calendar');
+    const [activeTab, setActiveTab] = useState<'calendar' | 'archive' | 'sync'>('calendar');
   
   // Dynamic States
   const [posts, setPosts] = useState<MediaPost[]>([]);
@@ -111,7 +99,7 @@ export const MediaPage: React.FC<{
       });
       setPosts(ps);
     }, (error) => {
-      console.warn('Fallback media posts:', error);
+      console.error("Firebase sync error", error);
       setPosts([
         { id: '1', title: 'National Day Rover Salute Announcement', date: '2026-08-19', platform: 'Instagram', caption: 'Honoring our nation and our duties as scouts. Prepared and motivated.', status: 'Scheduled', creatorName: 'ASG Media Link' },
         { id: '2', title: 'Pioneering Camp Highlight Reels', date: '2026-08-15', platform: 'Instagram', caption: 'Witness the rigor, the knots, and the heights. #ArabiyyaRovers', status: 'Published', creatorName: 'ASG Media Link' }
@@ -127,7 +115,7 @@ export const MediaPage: React.FC<{
       setFiles(fs);
       setLoading(false);
     }, (error) => {
-      console.warn('Fallback media archive files:', error);
+      console.error("Firebase sync error", error);
       setFiles([
         { id: '1', name: 'Jamboree_Camp_Kickoff.jpg', folder: 'Photos', size: '4.8 MB', uploadedBy: 'Sana Ahmed', date: '2026-08-12', consentChecked: true },
         { id: '2', name: 'Investiture_Rollup_Banner_Final.pdf', folder: 'Posters', size: '12.4 MB', uploadedBy: 'Ibrahim Manik', date: '2026-08-10', consentChecked: true },
@@ -144,7 +132,7 @@ export const MediaPage: React.FC<{
       });
       setTasks(ts);
     }, (error) => {
-      console.warn('Fallback media tasks:', error);
+      console.error("Firebase sync error", error);
       setTasks([
         { id: '1', title: 'Design graphic poster for the Squire Induction Ceremony', assignedTo: 'ASG Creative Officer', status: 'In Progress', dueDate: '2026-08-25', description: 'Create high-res SVG roll-up layout and social media promotional formats.' },
         { id: '2', title: 'Write Viber Community blast caption for beach cleanup logistics', assignedTo: 'Zeeshan Ahmed', status: 'Approved', dueDate: '2026-08-19', description: 'Draft brief guidelines, gear checklist, and assembly map directions.' }
@@ -176,12 +164,7 @@ export const MediaPage: React.FC<{
       setIsPostOpen(false);
       setPTitle('');
       setPCaption('');
-    } catch (err) {
-      setPosts(prev => [postData as MediaPost, ...prev]);
-      setIsPostOpen(false);
-      setPTitle('');
-      setPCaption('');
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleUploadFile = async (e: React.FormEvent) => {
@@ -208,12 +191,7 @@ export const MediaPage: React.FC<{
       setIsUploadOpen(false);
       setFName('');
       setFConsent(false);
-    } catch (err) {
-      setFiles(prev => [...prev, { id: Date.now().toString(), ...fileData } as MediaFile]);
-      setIsUploadOpen(false);
-      setFName('');
-      setFConsent(false);
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleCreateTask = async (e: React.FormEvent) => {
@@ -233,37 +211,30 @@ export const MediaPage: React.FC<{
       setIsTaskOpen(false);
       setTTitle('');
       setTDesc('');
-    } catch (err) {
-      setTasks(prev => [...prev, { id: Date.now().toString(), ...taskData } as MediaTask]);
-      setIsTaskOpen(false);
-      setTTitle('');
-      setTDesc('');
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleUpdateTaskStatus = async (id: string, next: MediaTask['status']) => {
     try {
       await updateDoc(doc(db, 'media_tasks', id), { status: next });
-    } catch (err) {
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, status: next } : t));
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
-  const simulatedRolesList = [
+  const currentRolesList = [
     'Media Coordinator',
     'ASG Media Team',
     'Normal Rover Member',
     'Administrator'
   ];
 
-  const isAdvisor = simulatedRole.toLowerCase().includes('advisor') || 
-                    simulatedRole.toLowerCase().includes('administrator') || 
-                    simulatedRole.toLowerCase().includes('ziyad');
+  const roleLower = (currentRole || '').toLowerCase();
+  const isAdvisor = roleLower.includes('advisor') || 
+                    roleLower.includes('administrator') || 
+                    roleLower.includes('ziyad');
 
   const hasRolePermission = pagePermissions?.some(p => 
-    p.memberId.toLowerCase() === simulatedRole.toLowerCase() && p.grantedPages.includes('media')
-  ) || (!pagePermissions?.some(p => p.memberId.toLowerCase() === simulatedRole.toLowerCase()) && 
-        DEFAULT_ROLE_PERMISSIONS[simulatedRole]?.includes('media'));
+    p.memberId && p.memberId.toLowerCase() === roleLower && p.grantedPages?.includes('media')
+  );
 
   const actualHasAccess = isAdvisor || hasRolePermission;
 
@@ -279,19 +250,7 @@ export const MediaPage: React.FC<{
           <p className="text-xs text-slate-500">Plan social publicity schedules, organize digital assets with compliance verification, and coordinate with ASG.</p>
         </div>
 
-        {/* Simulator Selector */}
-        <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 shrink-0">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Simulate Role:</span>
-          <select
-            value={simulatedRole}
-            onChange={(e) => setSimulatedRole(e.target.value)}
-            className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 focus:outline-none"
-          >
-            {simulatedRolesList.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
+        
       </div>
 
       {/* Role Access Info Banner for Normal Members */}
@@ -308,16 +267,10 @@ export const MediaPage: React.FC<{
               </p>
             </div>
           </div>
-          <button 
-            onClick={() => setSimulatedRole('Media Coordinator')}
-            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[11px] font-bold transition-colors cursor-pointer shrink-0"
-          >
-            Impersonate Coordinator
-          </button>
         </div>
       )}
 
-      <>
+
           {/* Tabs */}
           <div className="flex border-b border-slate-200 gap-1.5 bg-slate-100/55 p-1 rounded-xl max-w-lg">
             <button
@@ -538,7 +491,7 @@ export const MediaPage: React.FC<{
               </div>
             </div>
           )}
-        </>
+  
 
       {/* Schedule Post Modal */}
       {isPostOpen && (

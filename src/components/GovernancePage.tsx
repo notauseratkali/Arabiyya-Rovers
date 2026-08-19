@@ -14,20 +14,13 @@ import {
   BookOpen,
   ArrowRight,
   ShieldAlert,
-  Users
+  Users,
+  Network
 } from 'lucide-react';
 import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { PagePermissions } from '../services/permissionsService';
-
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  'Council Secretary': ['governance', 'events', 'media', 'records'],
-  'Council Treasurer': ['finance'],
-  'Council Quartermaster': ['progress', 'records'],
-  'Secretary': ['governance', 'events', 'media', 'records'],
-  'Treasurer': ['finance'],
-  'Quartermaster': ['progress', 'records'],
-};
+import { OrgChart } from './OrgChart';
 
 interface Goal {
   id: string;
@@ -62,10 +55,7 @@ export const GovernancePage: React.FC<{
 }) => {
   const currentRole = isAdmin ? 'Administrator' : userRole;
 
-  // Active simulated role for testing
-  const [simulatedRole, setSimulatedRole] = useState<string>(currentRole);
-
-  const [activeTab, setActiveTab] = useState<'goals' | 'meetings'>('goals');
+    const [activeTab, setActiveTab] = useState<'goals' | 'meetings' | 'hierarchy'>('hierarchy');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,35 +92,10 @@ export const GovernancePage: React.FC<{
       // Sort: High priority first
       setGoals(gList.sort((a,b) => b.progress - a.progress));
       setLoading(false);
-    }, (error) => {
-      console.warn('Fallback to local state for goals:', error);
-      // Fallback seeds if Firestore isn't provisioned or connected
-      setGoals([
-        { id: '1', title: 'Complete annual Rover syllabus alignment with ASG guidelines', category: 'Annual Plan', progress: 80, status: 'In Progress', priority: 'High', targetDate: '2026-11-30' },
-        { id: '2', title: 'Recruit 15 new Rover Squires and complete onboarding', category: 'Priority Goal', progress: 40, status: 'In Progress', priority: 'High', targetDate: '2026-09-15' },
-        { id: '3', title: 'Establish emergency first-aid mobilization partnership', category: 'Strategic Initiative', progress: 10, status: 'Not Started', priority: 'Medium', targetDate: '2026-12-20' },
-      ]);
-      setLoading(false);
-    });
-
-    const qMeetings = query(collection(db, 'governance_meetings'), orderBy('date', 'desc'));
-    const unsubMeetings = onSnapshot(qMeetings, (snapshot) => {
-      const mList: Meeting[] = [];
-      snapshot.forEach(doc => {
-        mList.push({ id: doc.id, ...doc.data() } as Meeting);
-      });
-      setMeetings(mList);
-    }, (error) => {
-      console.warn('Fallback to local state for meetings:', error);
-      setMeetings([
-        { id: '1', title: 'Q3 Annual Review & Strategy Briefing', date: '2026-08-25', time: '20:30', location: 'Meeting Room A / Online', agenda: '1. Progress on badges.\n2. Finance audit overview.\n3. Upcoming National Camp preparation.', status: 'Scheduled', resolutions: ['Align training modules', 'Establish budget threshold'] },
-        { id: '2', title: 'Emergency Council Resolution Meeting', date: '2026-08-01', time: '14:00', location: 'Main HQ', agenda: '1. Reviewing quartermaster logs.\n2. Assigning event coordinators.', status: 'Completed', minutes: 'All positions successfully vetted and logbooks synchronized.', resolutions: ['Approved fuel reimbursement up to 500 MVR'] }
-      ]);
     });
 
     return () => {
       unsubGoals();
-      unsubMeetings();
     };
   }, []);
 
@@ -151,12 +116,7 @@ export const GovernancePage: React.FC<{
       await addDoc(collection(db, 'governance_goals'), goalData);
       setIsAddGoalOpen(false);
       setNewGoalTitle('');
-    } catch (err) {
-      console.error('Failed to save goal:', err);
-      setGoals(prev => [...prev, { id: Date.now().toString(), ...goalData } as Goal]);
-      setIsAddGoalOpen(false);
-      setNewGoalTitle('');
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleUpdateProgress = async (goalId: string, nextProgress: number) => {
@@ -170,9 +130,7 @@ export const GovernancePage: React.FC<{
         progress: val,
         status: nextStatus
       });
-    } catch (err) {
-      setGoals(prev => prev.map(g => g.id === goalId ? { ...g, progress: val, status: nextStatus } : g));
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleCreateMeeting = async (e: React.FormEvent) => {
@@ -194,12 +152,7 @@ export const GovernancePage: React.FC<{
       setIsAddMeetingOpen(false);
       setNewMeetingTitle('');
       setNewMeetingAgenda('');
-    } catch (err) {
-      setMeetings(prev => [{ id: Date.now().toString(), ...mData } as Meeting, ...prev]);
-      setIsAddMeetingOpen(false);
-      setNewMeetingTitle('');
-      setNewMeetingAgenda('');
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleOpenMinutesEditor = (meeting: Meeting) => {
@@ -226,13 +179,10 @@ export const GovernancePage: React.FC<{
     try {
       await updateDoc(doc(db, 'governance_meetings', editingMeeting.id), updates);
       setEditingMeeting(null);
-    } catch (err) {
-      setMeetings(prev => prev.map(m => m.id === editingMeeting.id ? { ...m, ...updates } : m));
-      setEditingMeeting(null);
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
-  const simulatedRolesList = [
+  const currentRolesList = [
     'Council Secretary',
     'Council Member',
     'Treasurer',
@@ -241,14 +191,14 @@ export const GovernancePage: React.FC<{
     'Administrator'
   ];
 
-  const isAdvisor = simulatedRole.toLowerCase().includes('advisor') || 
-                    simulatedRole.toLowerCase().includes('administrator') || 
-                    simulatedRole.toLowerCase().includes('ziyad');
+  const roleLower = (currentRole || '').toLowerCase();
+  const isAdvisor = roleLower.includes('advisor') || 
+                    roleLower.includes('administrator') || 
+                    roleLower.includes('ziyad');
 
   const hasRolePermission = pagePermissions?.some(p => 
-    p.memberId.toLowerCase() === simulatedRole.toLowerCase() && p.grantedPages.includes('governance')
-  ) || (!pagePermissions?.some(p => p.memberId.toLowerCase() === simulatedRole.toLowerCase()) && 
-        DEFAULT_ROLE_PERMISSIONS[simulatedRole]?.includes('governance'));
+    p.memberId && p.memberId.toLowerCase() === roleLower && p.grantedPages?.includes('governance')
+  );
 
   const actualHasAccess = isAdvisor || hasRolePermission;
 
@@ -264,19 +214,7 @@ export const GovernancePage: React.FC<{
           <p className="text-xs text-slate-500">Monitor priority strategic plans and run official council sessions.</p>
         </div>
 
-        {/* Simulator Selector */}
-        <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 shrink-0">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Simulate Role:</span>
-          <select
-            value={simulatedRole}
-            onChange={(e) => setSimulatedRole(e.target.value)}
-            className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 focus:outline-none"
-          >
-            {simulatedRolesList.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
+        
       </div>
 
       {/* Role Access Security Guard */}
@@ -291,19 +229,22 @@ export const GovernancePage: React.FC<{
               This module contains confidential executive decisions, minutes, and strategic goals. Access is restricted to Council Members, Secretaries, and Leadership.
             </p>
           </div>
-          <div className="pt-2">
-            <button 
-              onClick={() => setSimulatedRole('Council Secretary')}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
-            >
-              Impersonate Council Secretary for Audit
-            </button>
-          </div>
         </div>
       ) : (
         <>
           {/* Main Action Tabs */}
-          <div className="flex border-b border-slate-200 gap-1.5 bg-slate-100/55 p-1 rounded-xl max-w-md">
+          <div className="flex border-b border-slate-200 gap-1.5 bg-slate-100/55 p-1 rounded-xl max-w-xl">
+            <button
+              onClick={() => setActiveTab('hierarchy')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold rounded-lg transition-all ${
+                activeTab === 'hierarchy'
+                  ? 'bg-white text-[#1e40af] shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <Network className="w-4 h-4" />
+              Reporting Organogram
+            </button>
             <button
               onClick={() => setActiveTab('goals')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold rounded-lg transition-all ${
@@ -327,6 +268,11 @@ export const GovernancePage: React.FC<{
               Meeting Manager
             </button>
           </div>
+
+          {/* Reporting Organogram Tab */}
+          {activeTab === 'hierarchy' && (
+            <OrgChart isAdmin={isAdmin} />
+          )}
 
           {/* Goal Tracker Tab */}
           {activeTab === 'goals' && (
@@ -483,8 +429,6 @@ export const GovernancePage: React.FC<{
               </div>
             </div>
           )}
-        </>
-      )}
 
       {/* Goal Add Modal */}
       {isAddGoalOpen && (
@@ -719,6 +663,8 @@ export const GovernancePage: React.FC<{
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

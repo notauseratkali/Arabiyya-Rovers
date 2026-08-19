@@ -39,7 +39,7 @@ import {
 } from '../services/chatService';
 import { subscribeToMembers, subscribeToLeaders } from '../services/membersService';
 import { RoverLogo } from './RoverLogo';
-import { MemberItem, LeadershipItem } from './MembersPage';
+import { MemberItem, LeadershipItem, INITIAL_MEMBERS, INITIAL_LEADERSHIP } from './MembersPage';
 
 interface ChatPageProps {
   isAdmin?: boolean;
@@ -48,8 +48,8 @@ interface ChatPageProps {
 
 export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [members, setMembers] = useState<MemberItem[]>([]);
-  const [leaders, setLeaders] = useState<LeadershipItem[]>([]);
+  const [members, setMembers] = useState<MemberItem[]>(INITIAL_MEMBERS);
+  const [leaders, setLeaders] = useState<LeadershipItem[]>(INITIAL_LEADERSHIP);
   const [loading, setLoading] = useState(true);
 
   // Active Posting Identity (defaults to logged in user or Portal Administrator)
@@ -96,9 +96,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser
   const [reports, setReports] = useState<MessageReport[]>([]);
   const [showReportsView, setShowReportsView] = useState(false);
 
+  const ADMIN_DEFAULT_ADDRESS = "Al Madarsathul Arabiyyathul Islamiyya / Boduthakurufaanu Magu / K. Male'";
+
   // Attachment Modal States
   const [locationModalOpen, setLocationModalOpen] = useState(false);
-  const [customLocationText, setCustomLocationText] = useState('Malé Crew HQ');
+  const [customLocationText, setCustomLocationText] = useState(() => {
+    return isAdmin ? ADMIN_DEFAULT_ADDRESS : 'Malé Crew HQ';
+  });
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageUrlText, setImageUrlText] = useState('');
   const [imageCaptionText, setImageCaptionText] = useState('');
@@ -137,11 +141,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser
   // Subscribe to Members & Leaders
   useEffect(() => {
     const unsubMembers = subscribeToMembers(
-      (mList) => setMembers(mList),
+      (mList) => {
+        if (mList && mList.length > 0) {
+          setMembers(mList);
+        }
+      },
       (err) => console.error(err)
     );
     const unsubLeaders = subscribeToLeaders(
-      (lList) => setLeaders(lList),
+      (lList) => {
+        if (lList && lList.length > 0) {
+          setLeaders(lList);
+        }
+      },
       (err) => console.error(err)
     );
     return () => {
@@ -343,9 +355,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
-      m.text.toLowerCase().includes(q) ||
-      m.senderName.toLowerCase().includes(q) ||
-      (m.locationName && m.locationName.toLowerCase().includes(q))
+      Boolean(m.text && m.text.toLowerCase().includes(q)) ||
+      Boolean(m.senderName && m.senderName.toLowerCase().includes(q)) ||
+      Boolean(m.locationName && m.locationName.toLowerCase().includes(q))
     );
   });
 
@@ -521,13 +533,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser
     ...members.map(m => ({
       id: m.id,
       name: m.name || 'Member',
-      username: m.username || `@${(m.name || 'member').toLowerCase().replace(/[^a-z0-9_]/g, '')}`,
+      username: m.username || `@${(m.name || 'member')?.toLowerCase().replace(/[^a-z0-9_]/g, '')}`,
       role: m.role || 'Rover Scout'
     })),
     ...leaders.map(l => ({
       id: l.id,
       name: l.name || 'Leader',
-      username: l.username || `@${(l.name || 'leader').toLowerCase().replace(/[^a-z0-9_]/g, '')}`,
+      username: l.username || `@${(l.name || 'leader')?.toLowerCase().replace(/[^a-z0-9_]/g, '')}`,
       role: l.title || 'Council Leader'
     })),
     {
@@ -540,9 +552,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser
     p.id && self.findIndex(s => s.id === p.id) === index
   );
 
+  const tq = (tagSearchQuery || '').toLowerCase();
   const filteredTagSuggestions = taggablePeople.filter(person => 
-    person.username.toLowerCase().includes(`@${tagSearchQuery.toLowerCase()}`) ||
-    person.name.toLowerCase().includes(tagSearchQuery.toLowerCase())
+    Boolean(person.username && person.username.toLowerCase().includes(`@${tq}`)) ||
+    Boolean(person.name && person.name.toLowerCase().includes(tq))
   );
 
   const handleSelectTag = (username: string) => {
@@ -566,7 +579,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser
         const usernameTag = match[1].toLowerCase();
         const trailing = match[2];
         
-        const exists = taggablePeople.some(p => p.username.toLowerCase() === usernameTag) ||
+        const exists = taggablePeople.some(p => p.username?.toLowerCase() === usernameTag) ||
                        usernameTag === '@administrator' ||
                        usernameTag === '@admin';
                        
@@ -604,10 +617,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser
                   <h2 className="text-sm font-bold truncate text-white">
                     Arabiyya Rovers
                   </h2>
-                  <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded-full font-medium border border-emerald-500/30 shrink-0 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    {onlineMembersCount} Online • {allPeople.length} Members
-                  </span>
                 </div>
                 <p className="text-xs text-slate-300 truncate font-normal">
                   {allPeople.filter(p => getPresenceInfo(p.lastActive, p.lastLogin, p.id === activeSenderId).isOnline).map(p => p.name.split(' ')[0]).slice(0, 4).join(', ') || allPeople.slice(0, 3).map(p => p.name.split(' ')[0]).join(', ')} {onlineMembersCount > 0 ? 'online' : 'in crew'}
@@ -1284,7 +1293,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser
               {/* Location Quick Button */}
               <button
                 type="button"
-                onClick={() => setLocationModalOpen(true)}
+                onClick={() => {
+                  const currentLoc = localStorage.getItem('koshaaru_user_address_v1') || (isAdmin ? ADMIN_DEFAULT_ADDRESS : 'Malé Crew HQ');
+                  setCustomLocationText(currentLoc);
+                  setLocationModalOpen(true);
+                }}
                 className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors cursor-pointer"
                 title="Quick Share Location"
               >
@@ -1456,24 +1469,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({ isAdmin = false, currentUser
                 placeholder="e.g. Alpha Crew HQ, Hulhumalé Base, Villingili Camp..."
                 className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:border-[#1e40af]"
               />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-500 mb-1.5">
-                Quick Location Presets
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {['Alpha Crew HQ, Malé', 'Hulhumalé Scout Base', 'Villingili Expedition Camp', 'Arabiyya Den', 'On Field Duty'].map((loc) => (
-                  <button
-                    key={loc}
-                    type="button"
-                    onClick={() => setCustomLocationText(loc)}
-                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer"
-                  >
-                    {loc}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex justify-end gap-3">

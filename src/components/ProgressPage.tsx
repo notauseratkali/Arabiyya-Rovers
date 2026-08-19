@@ -17,15 +17,6 @@ import { collection, addDoc, getDocs, onSnapshot, query, orderBy, updateDoc, doc
 import { db } from '../firebase';
 import { PagePermissions } from '../services/permissionsService';
 
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  'Council Secretary': ['governance', 'events', 'media', 'records'],
-  'Council Treasurer': ['finance'],
-  'Council Quartermaster': ['progress', 'records'],
-  'Secretary': ['governance', 'events', 'media', 'records'],
-  'Treasurer': ['finance'],
-  'Quartermaster': ['progress', 'records'],
-};
-
 interface MemberProgress {
   id: string;
   name: string;
@@ -67,10 +58,7 @@ export const ProgressPage: React.FC<{
 }) => {
   const currentRole = isAdmin ? 'Administrator' : userRole;
 
-  // Active simulated role for testing
-  const [simulatedRole, setSimulatedRole] = useState<string>(currentRole);
-
-  const [activeTab, setActiveTab] = useState<'matrix' | 'trainings' | 'service'>('matrix');
+    const [activeTab, setActiveTab] = useState<'matrix' | 'trainings' | 'service'>('matrix');
   
   // States
   const [memberMatrix, setMemberMatrix] = useState<MemberProgress[]>([]);
@@ -109,7 +97,7 @@ export const ProgressPage: React.FC<{
       setMemberMatrix(ms);
       setLoading(false);
     }, (error) => {
-      console.warn('Fallback matrix state:', error);
+      console.error("Firebase sync error", error);
       setMemberMatrix([
         { id: '1', name: 'Zeeshan Ahmed', role: 'Rover', crew: 'Abu Bakr Crew', completedBadges: ['Rover Badge', 'First Aid Certificate', 'Citizenship Award'], trainingSessions: ['Standard Pioneer Rigging'], serviceHours: 24 },
         { id: '2', name: 'Sana Ahmed', role: 'Rover Squire', crew: 'Ali Crew', completedBadges: ['Squire Onboarding'], trainingSessions: ['Introductory Rover Orientation'], serviceHours: 8 },
@@ -126,7 +114,7 @@ export const ProgressPage: React.FC<{
       });
       setTrainings(ts);
     }, (error) => {
-      console.warn('Fallback trainings state:', error);
+      console.error("Firebase sync error", error);
       setTrainings([
         { id: '1', title: 'Standard Pioneer Rigging & Ropes', date: '2026-08-20', time: '16:00', instructor: 'Advisor Ibrahim', targetAudience: 'Experienced Members', location: 'HQ Outdoors', status: 'Upcoming' },
         { id: '2', title: 'Introductory Rover Orientation & Squire Welcome', date: '2026-08-28', time: '19:30', instructor: 'Ahmed Nazih Nafiz', targetAudience: 'New Members', location: 'Hall B', status: 'Upcoming' }
@@ -141,7 +129,7 @@ export const ProgressPage: React.FC<{
       });
       setServiceLogs(ss);
     }, (error) => {
-      console.warn('Fallback service state:', error);
+      console.error("Firebase sync error", error);
       setServiceLogs([
         { id: '1', title: 'Henveiru Beach Clean-up Campaign', date: '2026-08-10', participants: ['Zeeshan Ahmed', 'Ibrahim Manik'], hoursPerParticipant: 4, description: 'Collected 12 bags of microplastics and discarded fishing nets from public beach line.' },
         { id: '2', title: 'National Blood Donation Aid Mobilization', date: '2026-08-02', participants: ['Sana Ahmed', 'Zeeshan Ahmed'], hoursPerParticipant: 6, description: 'Assisted Thalassemia Center with registration queues and refreshments coordination.' }
@@ -173,11 +161,7 @@ export const ProgressPage: React.FC<{
       await addDoc(collection(db, 'progress_trainings'), tData);
       setIsAddTrainingOpen(false);
       setTTitle('');
-    } catch (err) {
-      setTrainings(prev => [...prev, { id: Date.now().toString(), ...tData } as TrainingSession]);
-      setIsAddTrainingOpen(false);
-      setTTitle('');
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleCreateService = async (e: React.FormEvent) => {
@@ -200,7 +184,7 @@ export const ProgressPage: React.FC<{
       
       // Update individual participant hours in the matrix
       for (const pName of sParticipants) {
-        const match = memberMatrix.find(m => m.name.toLowerCase() === pName.toLowerCase());
+        const match = memberMatrix.find(m => m.name?.toLowerCase() === pName?.toLowerCase());
         if (match) {
           await updateDoc(doc(db, 'progress_matrix', match.id), {
             serviceHours: match.serviceHours + parseFloat(sHours)
@@ -211,12 +195,7 @@ export const ProgressPage: React.FC<{
       setIsAddServiceOpen(false);
       setSTitle('');
       setSParticipants([]);
-    } catch (err) {
-      setServiceLogs(prev => [...prev, { id: Date.now().toString(), ...sData } as ServiceProject]);
-      setIsAddServiceOpen(false);
-      setSTitle('');
-      setSParticipants([]);
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleToggleBadge = async (mId: string, badgeName: string) => {
@@ -232,9 +211,7 @@ export const ProgressPage: React.FC<{
       await updateDoc(doc(db, 'progress_matrix', mId), {
         completedBadges: updatedBadges
       });
-    } catch (err) {
-      setMemberMatrix(prev => prev.map(m => m.id === mId ? { ...m, completedBadges: updatedBadges } : m));
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleAddParticipant = () => {
@@ -244,21 +221,21 @@ export const ProgressPage: React.FC<{
     setNewParticipant('');
   };
 
-  const simulatedRolesList = [
+  const currentRolesList = [
     'Progress Coordinator',
     'Council Secretary',
     'Normal Rover Member',
     'Administrator'
   ];
 
-  const isAdvisor = simulatedRole.toLowerCase().includes('advisor') || 
-                    simulatedRole.toLowerCase().includes('administrator') || 
-                    simulatedRole.toLowerCase().includes('ziyad');
+  const roleLower = (currentRole || '').toLowerCase();
+  const isAdvisor = roleLower.includes('advisor') || 
+                    roleLower.includes('administrator') || 
+                    roleLower.includes('ziyad');
 
   const hasRolePermission = pagePermissions?.some(p => 
-    p.memberId.toLowerCase() === simulatedRole.toLowerCase() && p.grantedPages.includes('progress')
-  ) || (!pagePermissions?.some(p => p.memberId.toLowerCase() === simulatedRole.toLowerCase()) && 
-        DEFAULT_ROLE_PERMISSIONS[simulatedRole]?.includes('progress'));
+    p.memberId && p.memberId.toLowerCase() === roleLower && p.grantedPages?.includes('progress')
+  );
 
   const actualHasAccess = isAdvisor || hasRolePermission;
 
@@ -274,19 +251,7 @@ export const ProgressPage: React.FC<{
           <p className="text-xs text-slate-500">Track Rover syllabus badges, schedule squire orientation sessions, and log community service.</p>
         </div>
 
-        {/* Simulator Selector */}
-        <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 shrink-0">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Simulate Role:</span>
-          <select
-            value={simulatedRole}
-            onChange={(e) => setSimulatedRole(e.target.value)}
-            className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 focus:outline-none"
-          >
-            {simulatedRolesList.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
+        
       </div>
 
       {/* Role Access Info Banner for Normal Members */}
@@ -303,16 +268,10 @@ export const ProgressPage: React.FC<{
               </p>
             </div>
           </div>
-          <button 
-            onClick={() => setSimulatedRole('Progress Coordinator')}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-bold transition-colors cursor-pointer shrink-0"
-          >
-            Impersonate Coordinator
-          </button>
         </div>
       )}
 
-      <>
+
           {/* Tabs */}
           <div className="flex border-b border-slate-200 gap-1.5 bg-slate-100/55 p-1 rounded-xl max-w-lg">
             <button
@@ -533,7 +492,7 @@ export const ProgressPage: React.FC<{
               </div>
             </div>
           )}
-        </>
+  
 
       {/* Schedule Training Modal */}
       {isAddTrainingOpen && (

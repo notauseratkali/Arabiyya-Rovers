@@ -4,6 +4,7 @@ export type NavSection =
   | 'announcements' 
   | 'notebook' 
   | 'members' 
+  | 'courses'
   | 'settings'
   | 'governance'
   | 'finance'
@@ -38,6 +39,8 @@ export interface NoteItem {
   updatedAt: string;
   coverColor?: string;
   pinned?: boolean;
+  relatedCourseId?: string;
+  relatedCourseTitle?: string;
 }
 
 export type AnnouncementPriority = 'urgent' | 'high' | 'normal';
@@ -58,3 +61,39 @@ export interface AnnouncementItem {
   location?: string;
   attachments?: { name: string; url: string }[];
 }
+
+export interface MemberItem {
+  id: string;
+  name: string;
+  username?: string;
+  idCard?: string;
+  password?: string;
+  dateOfBirth: string;
+  gender?: string;
+  section?: string;
+  investitureDate?: string;
+  bloodType?: string;
+  email: string;
+  phone: string;
+  mobile?: string;
+  permanentAddress?: string;
+  currentAddress?: string;
+  telegram?: string;
+  whatsapp?: string;
+  instagram?: string;
+  emergencyContactName?: string;
+  emergencyContactNumber?: string;
+  role: string;
+  crew: string;
+  badgeRank: string;
+  status: 'Active' | 'On Leave' | 'Training';
+  joinedDate: string;
+  location?: string;
+  lastActive?: string;
+  lastSeen?: string;
+  lastLogin?: string;
+  welcomedToChat?: boolean;
+  hasLoggedInBefore?: boolean;
+  welcomedAt?: string;
+}
+

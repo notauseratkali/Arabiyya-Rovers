@@ -20,15 +20,6 @@ import { collection, addDoc, getDocs, onSnapshot, query, orderBy, limit } from '
 import { db } from '../firebase';
 import { PagePermissions } from '../services/permissionsService';
 
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  'Council Secretary': ['governance', 'events', 'media', 'records'],
-  'Council Treasurer': ['finance'],
-  'Council Quartermaster': ['progress', 'records'],
-  'Secretary': ['governance', 'events', 'media', 'records'],
-  'Treasurer': ['finance'],
-  'Quartermaster': ['progress', 'records'],
-};
-
 interface Transaction {
   id: string;
   type: 'Inward' | 'Outward';
@@ -60,10 +51,7 @@ export const FinancePage: React.FC<{
 }) => {
   const currentRole = isAdmin ? 'Administrator' : userRole;
 
-  // Active simulated role for testing
-  const [simulatedRole, setSimulatedRole] = useState<string>(currentRole);
-
-  const [activeTab, setActiveTab] = useState<'ledger' | 'budget' | 'handover'>('ledger');
+    const [activeTab, setActiveTab] = useState<'ledger' | 'budget' | 'handover'>('ledger');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,38 +86,10 @@ export const FinancePage: React.FC<{
       });
       setTransactions(txs);
       setLoading(false);
-    }, (error) => {
-      console.warn('Fallback to local state for transactions:', error);
-      // Fallback Seed Data
-      setTransactions([
-        { id: '1', type: 'Inward', category: 'Membership Fee', description: 'Annual crew membership fees - Batch A', amount: 3500, date: '2026-08-15', attachmentName: 'membership_batch_receipt.pdf', loggedBy: 'Ahmed Nazih Nafiz' },
-        { id: '2', type: 'Inward', category: 'Donation', description: 'Corporate youth development sponsorship', amount: 8000, date: '2026-08-10', attachmentName: 'sponsor_agreement.pdf', loggedBy: 'Ahmed Nazih Nafiz' },
-        { id: '3', type: 'Outward', category: 'Equipment', description: 'Heavy-duty camping ropes & carabiners', amount: 1200, date: '2026-08-05', attachmentName: 'invoice_hardware_991.pdf', loggedBy: 'Ahmed Nazih Nafiz' },
-        { id: '4', type: 'Outward', category: 'Refreshments', description: 'Weekly crew circle snacks', amount: 450, date: '2026-08-02', attachmentName: 'grocery_bill.png', loggedBy: 'Ahmed Nazih Nafiz' }
-      ]);
-      setLoading(false);
-    });
-
-    const qB = query(collection(db, 'finance_budgets'));
-    const unsubB = onSnapshot(qB, (snapshot) => {
-      const bs: Budget[] = [];
-      snapshot.forEach(doc => {
-        bs.push({ id: doc.id, ...doc.data() } as Budget);
-      });
-      setBudgets(bs);
-    }, (error) => {
-      console.warn('Fallback to local state for budgets:', error);
-      setBudgets([
-        { id: '1', name: 'Annual Hike & Campsite Allocation', allocated: 15000, spent: 4800, category: 'Expedition' },
-        { id: '2', name: 'Public Relations & Social Media Outreach', allocated: 5000, spent: 1500, category: 'Media' },
-        { id: '3', name: 'Rover Syllabi & Badge Materials', allocated: 8000, spent: 6500, category: 'Training' },
-        { id: '4', name: 'Council General Meetings & Hospitality', allocated: 3000, spent: 2200, category: 'General' }
-      ]);
     });
 
     return () => {
       unsubTx();
-      unsubB();
     };
   }, []);
 
@@ -174,14 +134,7 @@ export const FinancePage: React.FC<{
       setTxDesc('');
       setTxFileName('');
       setTxFileData('');
-    } catch (err) {
-      setTransactions(prev => [{ id: Date.now().toString(), ...nextTx } as Transaction, ...prev]);
-      setIsAddTxOpen(false);
-      setTxAmount('');
-      setTxDesc('');
-      setTxFileName('');
-      setTxFileData('');
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleCreateBudget = async (e: React.FormEvent) => {
@@ -200,12 +153,7 @@ export const FinancePage: React.FC<{
       setIsAddBudgetOpen(false);
       setBudgetName('');
       setBudgetAllocated('');
-    } catch (err) {
-      setBudgets(prev => [...prev, { id: Date.now().toString(), ...bData } as Budget]);
-      setIsAddBudgetOpen(false);
-      setBudgetName('');
-      setBudgetAllocated('');
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   // Math Metrics
@@ -213,15 +161,17 @@ export const FinancePage: React.FC<{
   const totalOutward = transactions.filter(t => t.type === 'Outward').reduce((sum, t) => sum + t.amount, 0);
   const netBalance = totalInward - totalOutward;
 
+  const q = (searchQuery || '').toLowerCase();
   const filteredTransactions = transactions.filter(t => {
-    const matchesSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          t.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (t.attachmentName && t.attachmentName.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = !q ||
+                          Boolean(t.description && t.description.toLowerCase().includes(q)) || 
+                          Boolean(t.category && t.category.toLowerCase().includes(q)) ||
+                          Boolean(t.attachmentName && t.attachmentName.toLowerCase().includes(q));
     const matchesFilter = selectedFilter === 'All' || t.type === selectedFilter;
     return matchesSearch && matchesFilter;
   });
 
-  const simulatedRolesList = [
+  const currentRolesList = [
     'Treasurer',
     'Council Treasurer',
     'Quartermaster',
@@ -229,14 +179,14 @@ export const FinancePage: React.FC<{
     'Administrator'
   ];
 
-  const isAdvisor = simulatedRole.toLowerCase().includes('advisor') || 
-                    simulatedRole.toLowerCase().includes('administrator') || 
-                    simulatedRole.toLowerCase().includes('ziyad');
+  const roleLower = (currentRole || '').toLowerCase();
+  const isAdvisor = roleLower.includes('advisor') || 
+                    roleLower.includes('administrator') || 
+                    roleLower.includes('ziyad');
 
   const hasRolePermission = pagePermissions?.some(p => 
-    p.memberId.toLowerCase() === simulatedRole.toLowerCase() && p.grantedPages.includes('finance')
-  ) || (!pagePermissions?.some(p => p.memberId.toLowerCase() === simulatedRole.toLowerCase()) && 
-        DEFAULT_ROLE_PERMISSIONS[simulatedRole]?.includes('finance'));
+    p.memberId && p.memberId.toLowerCase() === roleLower && p.grantedPages?.includes('finance')
+  );
 
   const actualHasAccess = isAdvisor || hasRolePermission;
 
@@ -259,19 +209,7 @@ export const FinancePage: React.FC<{
           <p className="text-xs text-slate-500">Log transactions, manage budgets, and generate end-of-term audit reports.</p>
         </div>
 
-        {/* Simulator Selector */}
-        <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 shrink-0">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Simulate Role:</span>
-          <select
-            value={simulatedRole}
-            onChange={(e) => setSimulatedRole(e.target.value)}
-            className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 focus:outline-none"
-          >
-            {simulatedRolesList.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
+        
       </div>
 
       {/* Role Access Security Guard Info Banner for Normal Members */}
@@ -288,16 +226,10 @@ export const FinancePage: React.FC<{
               </p>
             </div>
           </div>
-          <button 
-            onClick={() => setSimulatedRole('Treasurer')}
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[11px] font-bold transition-colors cursor-pointer shrink-0"
-          >
-            Impersonate Treasurer for Audit
-          </button>
         </div>
       )}
 
-      <>
+
         {/* Key Metric Blocks */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center justify-between">
@@ -580,7 +512,7 @@ export const FinancePage: React.FC<{
             </div>
           </div>
         )}
-      </>
+
 
       {/* Log Transaction Modal */}
       {isAddTxOpen && (

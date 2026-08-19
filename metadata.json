@@ -1,5 +1,5 @@
 {
-  "name": "Koshaaru Portal",
+  "name": "Arabiyya Rover Network",
   "description": "Streamlined platform for Arabiyya Rover Network to manage rover notes and activities.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

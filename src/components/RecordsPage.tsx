@@ -19,15 +19,6 @@ import { collection, addDoc, getDocs, onSnapshot, query, orderBy, updateDoc, doc
 import { db } from '../firebase';
 import { PagePermissions } from '../services/permissionsService';
 
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  'Council Secretary': ['governance', 'events', 'media', 'records'],
-  'Council Treasurer': ['finance'],
-  'Council Quartermaster': ['progress', 'records'],
-  'Secretary': ['governance', 'events', 'media', 'records'],
-  'Treasurer': ['finance'],
-  'Quartermaster': ['progress', 'records'],
-};
-
 interface MemberRecord {
   id: string;
   name: string;
@@ -60,10 +51,7 @@ export const RecordsPage: React.FC<{
 }) => {
   const currentRole = isAdmin ? 'Administrator' : userRole;
 
-  // Active simulated role for testing
-  const [simulatedRole, setSimulatedRole] = useState<string>(currentRole);
-
-  const [activeTab, setActiveTab] = useState<'directory' | 'vault' | 'portal' | 'handover'>('directory');
+    const [activeTab, setActiveTab] = useState<'directory' | 'vault' | 'portal' | 'handover'>('directory');
   
   // Dynamic States
   const [membersList, setMembersList] = useState<MemberRecord[]>([]);
@@ -90,7 +78,7 @@ export const RecordsPage: React.FC<{
       });
       setMembersList(ms);
     }, (error) => {
-      console.warn('Fallback member directory state:', error);
+      console.error("Firebase sync error", error);
       setMembersList([
         { id: '1', name: 'Zeeshan Ahmed', email: 'zeeshan@koshaaru.org', phone: '+960 771-2938', crew: 'Abu Bakr Crew', status: 'Active', joiningDate: '2024-03-15' },
         { id: '2', name: 'Sana Ahmed', email: 'sana@koshaaru.org', phone: '+960 798-1102', crew: 'Ali Crew', status: 'Squire', joiningDate: '2026-06-01' },
@@ -108,7 +96,7 @@ export const RecordsPage: React.FC<{
       setRecords(rs);
       setLoading(false);
     }, (error) => {
-      console.warn('Fallback official records state:', error);
+      console.error("Firebase sync error", error);
       setRecords([
         { id: '1', title: '5th Regular Executive Council Session Minutes', category: 'Minutes', uploadedBy: 'Council Secretary', date: '2026-08-01', fileName: 'council_session_5_minutes.pdf', isArchived: true },
         { id: '2', title: 'Q2 Financial Audit & Reconciled Balances', category: 'Annual Reports', uploadedBy: 'Treasurer Link', date: '2026-07-30', fileName: 'q2_reconciled_ledger.xlsx', isArchived: true },
@@ -143,13 +131,7 @@ export const RecordsPage: React.FC<{
       setSubTitle('');
       setSubFile('');
       setSubSummary('');
-    } catch (err) {
-      setRecords(prev => [subData as RecordDoc, ...prev]);
-      setIsSubmitOpen(false);
-      setSubTitle('');
-      setSubFile('');
-      setSubSummary('');
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const handleArchiveDocument = async (id: string) => {
@@ -157,9 +139,7 @@ export const RecordsPage: React.FC<{
       await updateDoc(doc(db, 'records_documents', id), {
         isArchived: true
       });
-    } catch (err) {
-      setRecords(prev => prev.map(r => r.id === id ? { ...r, isArchived: true } : r));
-    }
+    } catch (err) { console.error("Error", err); alert("Action failed."); }
   };
 
   const filteredMembers = membersList.filter(m => 
@@ -176,7 +156,7 @@ export const RecordsPage: React.FC<{
 
   const pendingSubmissions = records.filter(r => !r.isArchived);
 
-  const simulatedRolesList = [
+  const currentRolesList = [
     'Council Secretary',
     'Secretary',
     'Treasurer',
@@ -184,14 +164,13 @@ export const RecordsPage: React.FC<{
     'Administrator'
   ];
 
-  const isAdvisor = simulatedRole.toLowerCase().includes('advisor') || 
-                    simulatedRole.toLowerCase().includes('administrator') || 
-                    simulatedRole.toLowerCase().includes('ziyad');
+  const isAdvisor = currentRole?.toLowerCase().includes('advisor') || 
+                    currentRole?.toLowerCase().includes('administrator') || 
+                    currentRole?.toLowerCase().includes('ziyad');
 
   const hasRolePermission = pagePermissions?.some(p => 
-    p.memberId.toLowerCase() === simulatedRole.toLowerCase() && p.grantedPages.includes('records')
-  ) || (!pagePermissions?.some(p => p.memberId.toLowerCase() === simulatedRole.toLowerCase()) && 
-        DEFAULT_ROLE_PERMISSIONS[simulatedRole]?.includes('records'));
+    p.memberId?.toLowerCase() === currentRole?.toLowerCase() && p.grantedPages.includes('records')
+  );
 
   const actualHasAccess = isAdvisor || hasRolePermission;
 
@@ -207,19 +186,7 @@ export const RecordsPage: React.FC<{
           <p className="text-xs text-slate-500">Access central directory logs, official meeting archives, inter-department submissions, and term handovers.</p>
         </div>
 
-        {/* Simulator Selector */}
-        <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 shrink-0">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Simulate Role:</span>
-          <select
-            value={simulatedRole}
-            onChange={(e) => setSimulatedRole(e.target.value)}
-            className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 focus:outline-none"
-          >
-            {simulatedRolesList.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
+        
       </div>
 
       {/* Role Access Info Banner for Normal Members */}
@@ -236,16 +203,11 @@ export const RecordsPage: React.FC<{
               </p>
             </div>
           </div>
-          <button 
-            onClick={() => setSimulatedRole('Council Secretary')}
-            className="px-3.5 py-1.5 bg-[#1e40af] hover:bg-[#1e3a8a] text-white rounded-xl text-[11px] font-bold transition-colors cursor-pointer shrink-0"
-          >
-            Impersonate Secretary
-          </button>
+          
         </div>
       )}
 
-      <>
+
           {/* Tabs */}
           <div className="flex border-b border-slate-200 gap-1.5 bg-slate-100/55 p-1 rounded-xl max-w-xl">
             <button
@@ -401,7 +363,7 @@ export const RecordsPage: React.FC<{
                           </span>
                         </td>
                         <td className="p-4 text-center">
-                          {actualHasAccess || doc.category === 'Guidelines' ? (
+                          {actualHasAccess || (doc.category as string) === 'Guidelines' ? (
                             <button
                               onClick={() => alert(`📥 Downloading verified archival PDF: ${doc.fileName}`)}
                               className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200 inline-flex items-center gap-1 cursor-pointer"
@@ -517,7 +479,7 @@ export const RecordsPage: React.FC<{
               </div>
             </div>
           )}
-        </>
+  
 
       {/* Interdepartmental Submission Modal */}
       {isSubmitOpen && (
@@ -594,6 +556,7 @@ export const RecordsPage: React.FC<{
           </div>
         </div>
       )}
+
     </div>
   );
 };

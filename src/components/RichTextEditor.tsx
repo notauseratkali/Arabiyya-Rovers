@@ -108,7 +108,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         editorRef.current.innerHTML = initialContent || '';
       }
     }
-  }, []);
+  }, [initialContent]);
 
   const saveSelection = () => {
     const sel = window.getSelection();

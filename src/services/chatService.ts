@@ -30,6 +30,7 @@ export interface ChatMessage {
   };
   reactions?: Record<string, string[]>; // e.g., { '👍': ['m1', 'm2'], '❤️': ['m3'] }
   createdAt: string;
+  isDeleted?: boolean;
   editedAt?: string;
   editHistory?: { text: string; editedAt: string }[];
 }

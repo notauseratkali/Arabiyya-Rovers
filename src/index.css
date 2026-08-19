@@ -14,3 +14,11 @@
 body {
   font-family: 'Quicksand', sans-serif;
 }
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

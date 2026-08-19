@@ -15,7 +15,7 @@ interface LoginProps {
   portalTagline?: string;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLoginSuccess, portalName = 'Koshaaru Portal', portalTagline = 'Arabiyya Beyond Limits' }) => {
+export const Login: React.FC<LoginProps> = ({ onLoginSuccess, portalName = 'Arabiyya Rover Network', portalTagline = 'Arabiyya Beyond Limits' }) => {
   const [idCard, setIdCard] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -35,15 +35,16 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, portalName = 'Kosh
       let querySnapshot = await getDocs(q);
 
       // Fallback: Check username if ID card not matched directly
-      if (querySnapshot.empty) {
-        const usernameQuery = searchId.startsWith('@') ? searchId.toLowerCase() : `@${searchId.toLowerCase()}`;
+      const cleanId = (searchId || idCard || '').trim();
+      if (querySnapshot.empty && cleanId) {
+        const usernameQuery = cleanId.startsWith('@') ? cleanId.toLowerCase() : `@${cleanId.toLowerCase()}`;
         q = query(membersRef, where('username', '==', usernameQuery));
         querySnapshot = await getDocs(q);
       }
 
       // Fallback: Check email
-      if (querySnapshot.empty) {
-        q = query(membersRef, where('email', '==', idCard.trim().toLowerCase()));
+      if (querySnapshot.empty && cleanId) {
+        q = query(membersRef, where('email', '==', cleanId.toLowerCase()));
         querySnapshot = await getDocs(q);
       }
 
@@ -121,15 +122,15 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, portalName = 'Kosh
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
-        <div className="bg-gradient-to-br from-[#800020] to-[#1e40af] p-8 text-center">
-          <div className="w-20 h-20 mx-auto bg-white/10 backdrop-blur-md rounded-2xl p-2 flex items-center justify-center shadow-inner mb-4 border border-white/20">
-            <RoverLogo variant="color" className="w-16 h-16" />
+        <div className="bg-gradient-to-br from-[#800020] to-[#1e40af] p-6 sm:p-8 text-center">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto bg-white/10 backdrop-blur-md rounded-2xl p-2 flex items-center justify-center shadow-inner mb-3 sm:mb-4 border border-white/20">
+            <RoverLogo variant="color" className="w-12 h-12 sm:w-16 sm:h-16" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-1">{portalName}</h1>
-          <p className="text-white/80 text-sm">{portalTagline}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-white mb-1">{portalName}</h1>
+          <p className="text-white/80 text-xs sm:text-sm">{portalTagline}</p>
         </div>
         
-        <div className="p-8">
+        <div className="p-5 sm:p-8">
           <h2 className="text-lg font-bold text-slate-800 mb-6 text-center">Member Authentication</h2>
           
           {error && (

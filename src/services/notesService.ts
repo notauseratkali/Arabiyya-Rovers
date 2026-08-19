@@ -99,12 +99,14 @@ export function subscribeToNotes(
           status: data.status || 'draft',
           category: data.category || 'General',
           tags: Array.isArray(data.tags) ? data.tags : [],
-          author: data.author || 'Me',
-          authorRole: data.authorRole || 'Personal Note',
+          author: data.author || 'Rover Scout',
+          authorRole: data.authorRole || 'Rover Crew Member',
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || new Date().toISOString(),
           coverColor: data.coverColor || '#800020',
           pinned: Boolean(data.pinned),
+          relatedCourseId: data.relatedCourseId || undefined,
+          relatedCourseTitle: data.relatedCourseTitle || undefined,
         } as NoteItem;
       });
 
@@ -127,21 +129,28 @@ export async function saveNoteToFirestore(userId: string, note: NoteItem): Promi
   const notePath = `users/${activeUser}/personal_notes/${note.id}`;
   try {
     const noteRef = getNoteDoc(activeUser, note.id);
-    const data = {
-      title: note.title,
+    const data: Record<string, any> = {
+      title: note.title || '',
       slug: note.slug || '',
-      excerpt: note.excerpt,
-      content: note.content,
-      status: note.status,
-      category: note.category,
-      tags: note.tags,
-      author: note.author,
-      authorRole: note.authorRole,
-      createdAt: note.createdAt,
+      excerpt: note.excerpt || '',
+      content: note.content || '',
+      status: note.status || 'draft',
+      category: note.category || 'General',
+      tags: Array.isArray(note.tags) ? note.tags : ['General'],
+      author: note.author || 'Rover Scout',
+      authorRole: note.authorRole || 'Rover Crew Member',
+      createdAt: note.createdAt || new Date().toISOString(),
       updatedAt: note.updatedAt || new Date().toISOString(),
       coverColor: note.coverColor || '#800020',
       pinned: Boolean(note.pinned),
     };
+
+    if (note.relatedCourseId) {
+      data.relatedCourseId = note.relatedCourseId;
+    }
+    if (note.relatedCourseTitle) {
+      data.relatedCourseTitle = note.relatedCourseTitle;
+    }
 
     await setDoc(noteRef, data, { merge: true });
   } catch (error) {

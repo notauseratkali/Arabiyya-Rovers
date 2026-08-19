@@ -13,11 +13,28 @@ import {
   X,
   Lock,
   Unlock,
-  ShieldAlert
+  ShieldAlert,
+  Sparkles,
+  Calendar,
+  TrendingUp,
+  CheckCircle2,
+  Clock,
+  ArrowRight,
+  BookOpen,
+  Coins,
+  FileSpreadsheet,
+  Layers,
+  UserCheck,
+  Radio,
+  Zap,
+  User,
+  Filter,
+  Activity
 } from 'lucide-react';
 import { NoteItem, NavSection } from '../types';
 import { RoverLogo } from './RoverLogo';
 import { subscribeToPermissions, updatePageAccess, PagePermissions } from '../services/permissionsService';
+import { subscribeToCouncilRoles, saveCouncilRole, deleteCouncilRole } from '../services/councilRolesService';
 
 export interface CouncilRoleAssignment {
   id: string;
@@ -27,19 +44,19 @@ export interface CouncilRoleAssignment {
 }
 
 const INITIAL_COUNCIL_ROLES: CouncilRoleAssignment[] = [
-  { id: 'cr1', roleName: 'Council Secretary', assignedRoverName: 'Mariyam Shazra', crew: 'Delta Crew' },
-  { id: 'cr2', roleName: 'Council Treasurer', assignedRoverName: 'Hussain Rameez', crew: 'Bravo Crew' },
-  { id: 'cr3', roleName: 'Council Quartermaster', assignedRoverName: 'Ibrahim Nashidh', crew: 'Alpha Crew' },
+  { id: 'cr_advisor', roleName: 'Rover Advisor', assignedRoverName: 'Ahmed Ziyad', crew: 'Council Advisory' },
+  { id: 'cr_chair', roleName: 'Chairperson', assignedRoverName: '', crew: 'Executive Council' },
+  { id: 'cr_vchair', roleName: 'Vice Chairperson', assignedRoverName: '', crew: 'Executive Council' },
+  { id: 'cr_sec', roleName: 'Council Secretary', assignedRoverName: 'Mariyam Shazra', crew: 'Delta Crew' },
+  { id: 'cr_tres', roleName: 'Council Treasurer', assignedRoverName: 'Hussain Rameez', crew: 'Bravo Crew' },
+  { id: 'cr_qm', roleName: 'Council Quartermaster', assignedRoverName: 'Ibrahim Nashidh', crew: 'Alpha Crew' },
+  { id: 'cr_prog', roleName: 'Progress Coordinator', assignedRoverName: '', crew: 'Alpha Crew' },
+  { id: 'cr_event', roleName: 'Event Coordinator', assignedRoverName: '', crew: 'Delta Crew' },
+  { id: 'cr_media', roleName: 'Media Coordinator', assignedRoverName: '', crew: 'Beta Crew' },
+  { id: 'cr_policy', roleName: 'Policy Committee Member', assignedRoverName: '', crew: 'Executive Council' },
+  { id: 'cr_pr', roleName: 'Media & PR Committee Member', assignedRoverName: '', crew: 'Executive Council' },
+  { id: 'cr_adv_chair', roleName: 'Advisor to Chairperson', assignedRoverName: '', crew: 'Council Advisory' },
 ];
-
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  'Council Secretary': ['governance', 'events', 'media', 'records'],
-  'Council Treasurer': ['finance'],
-  'Council Quartermaster': ['progress', 'records'],
-  'Secretary': ['governance', 'events', 'media', 'records'],
-  'Treasurer': ['finance'],
-  'Quartermaster': ['progress', 'records'],
-};
 
 import { subscribeToMembers } from '../services/membersService';
 import { MemberItem } from '../components/MembersPage';
@@ -104,15 +121,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return () => unsub();
   }, []);
 
-  const [councilRoles, setCouncilRoles] = useState<CouncilRoleAssignment[]>(() => {
-    try {
-      const saved = localStorage.getItem('koshaaru_portal_council_roles_v2');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to load council roles', e);
-    }
-    return INITIAL_COUNCIL_ROLES;
-  });
+  const [councilRoles, setCouncilRoles] = useState<CouncilRoleAssignment[]>(INITIAL_COUNCIL_ROLES);
+
+  React.useEffect(() => {
+    const unsub = subscribeToCouncilRoles((roles) => {
+      setCouncilRoles(roles.map(r => ({
+        id: r.id,
+        roleName: r.roleName,
+        assignedRoverName: r.assignedRoverName || '',
+        crew: r.crew || ''
+      })));
+    });
+    return () => unsub();
+  }, []);
 
   const [newRoleName, setNewRoleName] = useState('');
   const [newSelectedRover, setNewSelectedRover] = useState('');
@@ -133,7 +154,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setTempPortalTagline(portalTagline);
   }, [portalTagline]);
 
-  const handleAddCouncilRole = () => {
+  const handleAddCouncilRole = async () => {
     if (!newRoleName.trim()) return;
     let roverName = '';
     let crewName = '';
@@ -151,13 +172,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       crew: crewName
     };
 
-    const updated = [...councilRoles, newItem];
-    setCouncilRoles(updated);
-    try {
-      localStorage.setItem('koshaaru_portal_council_roles_v2', JSON.stringify(updated));
-    } catch (e) {
-      console.error('Failed to save council roles:', e);
-    }
+    await saveCouncilRole(newItem);
     setNewRoleName('');
     setNewSelectedRover('');
     setIsAddingRole(false);
@@ -175,7 +190,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handleSaveEditedRole = (e: React.FormEvent) => {
+  const handleSaveEditedRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRole || !editRoleName.trim()) return;
 
@@ -188,38 +203,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
       crewName = parts[1] ? parts[1].replace(')', '') : '';
     }
 
-    const updated = councilRoles.map(r => {
-      if (r.id === editingRole.id) {
-        return {
-          ...r,
-          roleName: editRoleName.trim(),
-          assignedRoverName: roverName,
-          crew: crewName
-        };
-      }
-      return r;
+    await saveCouncilRole({
+      id: editingRole.id,
+      roleName: editRoleName.trim(),
+      assignedRoverName: roverName,
+      crew: crewName
     });
 
-    setCouncilRoles(updated);
-    try {
-      localStorage.setItem('koshaaru_portal_council_roles_v2', JSON.stringify(updated));
-    } catch (e) {
-      console.error('Failed to save updated council roles:', e);
-    }
     setEditingRole(null);
   };
 
   // Delete role confirmation modal state
   const [roleToDelete, setRoleToDelete] = useState<CouncilRoleAssignment | null>(null);
 
-  const handleRemoveCouncilRole = (id: string) => {
-    const updated = councilRoles.filter(r => r.id !== id);
-    setCouncilRoles(updated);
-    try {
-      localStorage.setItem('koshaaru_portal_council_roles_v2', JSON.stringify(updated));
-    } catch (e) {
-      console.error('Failed to save council roles:', e);
-    }
+  const handleRemoveCouncilRole = async (id: string) => {
+    await deleteCouncilRole(id);
     setRoleToDelete(null);
   };
 
@@ -449,11 +447,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Role Title</label>
                   <input
                     type="text"
+                    list="dashboard-organogram-roles"
                     value={newRoleName}
                     onChange={(e) => setNewRoleName(e.target.value)}
-                    placeholder="e.g. Gear Master / Event Coordinator"
+                    placeholder="e.g. Council Secretary / Progress Coordinator"
                     className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#1e40af]"
                   />
+                  <datalist id="dashboard-organogram-roles">
+                    <option value="Rover Advisor" />
+                    <option value="Chairperson" />
+                    <option value="Vice Chairperson" />
+                    <option value="Council Secretary" />
+                    <option value="Council Treasurer" />
+                    <option value="Council Quartermaster" />
+                    <option value="Progress Coordinator" />
+                    <option value="Event Coordinator" />
+                    <option value="Media Coordinator" />
+                    <option value="Policy Committee Member" />
+                    <option value="Media & PR Committee Member" />
+                    <option value="Advisor to Chairperson" />
+                  </datalist>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {['Chairperson', 'Vice Chairperson', 'Council Secretary', 'Council Treasurer', 'Progress Coordinator', 'Event Coordinator', 'Media Coordinator'].map(r => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setNewRoleName(r)}
+                        className="px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[9px] font-semibold transition-colors cursor-pointer"
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Select Rover Member</label>
@@ -535,11 +560,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </tr>
                 ) : (
                   councilRoles.map((role) => {
-                    const isMemAdvisor = role.roleName.toLowerCase().includes('advisor');
-                    const rolePerm = pagePermissionsList.find(p => p.memberId.toLowerCase() === role.roleName.toLowerCase());
-                    const grantedPages = rolePerm 
-                      ? rolePerm.grantedPages 
-                      : (DEFAULT_ROLE_PERMISSIONS[role.roleName] || []);
+                    const isMemAdvisor = (role.roleName || '').toLowerCase().includes('advisor');
+                    const rolePerm = pagePermissionsList.find(p => (p.memberId || '').toLowerCase() === (role.roleName || '').toLowerCase() || (p.memberName || '').toLowerCase() === (role.roleName || '').toLowerCase());
+                    const grantedPages = rolePerm ? (rolePerm.grantedPages || []) : [];
 
                     return (
                       <tr key={role.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
@@ -665,29 +688,82 @@ export const Dashboard: React.FC<DashboardProps> = ({
     );
   }
 
+  // Compute resolved role details
+  const realRole = currentUser?.role || (isAdmin ? 'Administrator' : 'Rover Scout');
+  const realName = currentUser?.name || (isAdmin ? 'Ahmed Nazih Nafiz' : 'Rover Scout');
+  const realCrew = currentUser?.crew || 'Alpha Crew';
+  const realIdCard = currentUser?.idCard || 'A123456';
+
+  const effectiveRole = realRole;
+
+  const isRoleAdmin = (effectiveRole || '').toLowerCase().includes('admin') || (effectiveRole || '').toLowerCase().includes('advisor') || isAdmin;
+  const isRoleCouncil = (effectiveRole || '').toLowerCase().includes('council') || councilRoles.some(r => Boolean(r.assignedRoverName && realName && r.assignedRoverName.toLowerCase() === realName.toLowerCase()));
+  const isRoleLeader = (effectiveRole || '').toLowerCase().includes('leader') || (effectiveRole || '').toLowerCase().includes('advisor');
+
+  // User Council Role if any
+  const matchedCouncilRole = councilRoles.find(r => Boolean(r.assignedRoverName && realName && r.assignedRoverName.toLowerCase() === realName.toLowerCase()));
+
   return (
-    <div className="max-w-6xl mx-auto py-6 px-4 sm:px-6 space-y-6">
-      {/* Top Banner Card */}
+    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 space-y-6">
+      {/* Hero Welcome Banner with Personalized Role Profile Card */}
       <div 
         id="portal-welcome-card"
-        className="bg-white rounded-xl border border-slate-200 p-6 sm:p-8 shadow-xs relative overflow-hidden"
+        className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs relative overflow-hidden"
       >
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#800020] via-[#1e40af] to-[#3b82f6]" />
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#800020] via-[#1e40af] to-emerald-600" />
 
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-bold bg-slate-100 text-[#0f1e36] border border-slate-200 shadow-2xs">
-              <RoverLogo variant="color" className="w-4 h-4" />
-              <span>Arabiyya Rover Network (ASG ROVERS)</span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-[#800020]/10 text-[#800020] border border-[#800020]/20">
+                <RoverLogo variant="color" className="w-4 h-4" />
+                <span>{portalName}</span>
+              </div>
+
+              {/* Role Tag */}
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold ${
+                isRoleAdmin
+                  ? 'bg-blue-50 text-[#1e40af] border border-blue-200'
+                  : isRoleCouncil
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-amber-50 text-amber-800 border border-amber-200'
+              }`}>
+                <Award className="w-3.5 h-3.5" />
+                <span>Role: {effectiveRole}</span>
+              </span>
+
+              {matchedCouncilRole && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>{matchedCouncilRole.roleName}</span>
+                </span>
+              )}
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-bold text-[#0f1e36] tracking-tight">
-              {portalName}
+              Assalamu Alaikum, {realName}!
             </h1>
 
-            <p className="text-sm text-slate-600 max-w-xl">
+            <p className="text-xs sm:text-sm text-slate-600 max-w-2xl leading-relaxed">
               {portalTagline}
             </p>
+
+            <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-500 pt-1">
+              <span className="flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-[#1e40af]" />
+                Crew: <strong className="text-slate-800">{realCrew}</strong>
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                ID Card: <strong className="text-slate-800">{realIdCard}</strong>
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#800020]" />
+                Status: <strong className="text-emerald-600">Active Rover</strong>
+              </span>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2.5 shrink-0">
@@ -699,6 +775,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <FileText className="w-4 h-4" />
               Open Notebook
             </button>
+            <button
+              onClick={() => onNavigateTo('chat')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1e40af] hover:bg-[#1e3a8a] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs"
+            >
+              <Radio className="w-4 h-4" />
+              Members Chat
+            </button>
             {isAdmin && (
               <button
                 id="quick-settings-btn"
@@ -706,9 +789,256 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
               >
                 <Settings className="w-4 h-4" />
-                Settings
+                Portal Settings
               </button>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Role-Specific Key Metrics Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Metric 1 */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+              {isRoleAdmin ? 'Total Network Rovers' : 'My Crew Members'}
+            </p>
+            <p className="text-2xl font-bold text-[#0f1e36] mt-1">
+              {isRoleAdmin ? allMembers.length : (allMembers.filter(m => m.crew === realCrew).length || 7)}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Active & Registered</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#1e40af] border border-blue-100 flex items-center justify-center">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Metric 2 */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+              {isRoleCouncil ? 'Council Roles Assigned' : 'Crews Active'}
+            </p>
+            <p className="text-2xl font-bold text-[#0f1e36] mt-1">
+              {councilRoles.filter(r => r.assignedRoverName).length} / {councilRoles.length}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Council Officers</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center">
+            <Award className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Metric 3 */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+              Field Logs & Notes
+            </p>
+            <p className="text-2xl font-bold text-[#0f1e36] mt-1">
+              {notes.length}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Rover Field Notebooks</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-rose-50 text-[#800020] border border-rose-100 flex items-center justify-center">
+            <FileText className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Metric 4 */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+              {isRoleAdmin ? 'System Access' : 'My Progress Rank'}
+            </p>
+            <p className="text-2xl font-bold text-[#0f1e36] mt-1">
+              {isRoleAdmin ? 'Full Access' : 'Master Rover'}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Verified Permission</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Role-Tailored Action Center */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h2 className="text-base font-bold text-[#0f1e36] flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#800020]" />
+              Role Action Center ({effectiveRole})
+            </h2>
+            <p className="text-xs text-slate-500">
+              Quick access tools optimized for your assigned organizational responsibilities
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Action 1 */}
+          <button
+            onClick={() => onNavigateTo('courses')}
+            className="p-4 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-left transition-all group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-lg bg-blue-100 text-[#1e40af] flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+              <Layers className="w-5 h-5" />
+            </div>
+            <h3 className="text-xs font-bold text-[#0f1e36] group-hover:text-[#1e40af] transition-colors">
+              Tracks & Skill Badges
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Review badge schemes, skill checks & testing
+            </p>
+          </button>
+
+          {/* Action 2 */}
+          <button
+            onClick={() => onNavigateTo('members')}
+            className="p-4 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-left transition-all group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+              <Users className="w-5 h-5" />
+            </div>
+            <h3 className="text-xs font-bold text-[#0f1e36] group-hover:text-emerald-700 transition-colors">
+              Member Directory
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Browse crews, advisers & leader logins
+            </p>
+          </button>
+
+          {/* Action 3 */}
+          <button
+            onClick={() => onNavigateTo('governance')}
+            className="p-4 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-left transition-all group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-lg bg-rose-100 text-[#800020] flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <h3 className="text-xs font-bold text-[#0f1e36] group-hover:text-[#800020] transition-colors">
+              Governance & Policies
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Review resolutions & constitution
+            </p>
+          </button>
+
+          {/* Action 4 */}
+          <button
+            onClick={() => onNavigateTo('finance')}
+            className="p-4 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-left transition-all group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+              <Coins className="w-5 h-5" />
+            </div>
+            <h3 className="text-xs font-bold text-[#0f1e36] group-hover:text-amber-800 transition-colors">
+              Finance & Ledger
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Track crew dues, expenses & statements
+            </p>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Grid: Activity Feed & Council Roles Directory */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column: Recent Field Notebook Entries */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-base font-bold text-[#0f1e36] flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-[#800020]" />
+              Recent Field Notebooks & Logs
+            </h2>
+            <button
+              onClick={() => onNavigateTo('notebook')}
+              className="text-xs font-bold text-[#1e40af] hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span>View All ({notes.length})</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {notes.slice(0, 4).map((note) => (
+              <div
+                key={note.id}
+                onClick={() => onNavigateTo('notebook')}
+                className="p-3.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl transition-all cursor-pointer flex items-start justify-between gap-3"
+              >
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#0f1e36] truncate">
+                      {note.title || 'Untitled Field Log'}
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 bg-blue-50 text-[#1e40af] rounded-md shrink-0">
+                      {note.category || 'General'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 line-clamp-1">
+                    {note.content || 'No text snippet available...'}
+                  </p>
+                  <div className="text-[10px] text-slate-400 flex items-center gap-2 pt-0.5">
+                    <span className="font-semibold text-slate-600">{note.author || realName}</span>
+                    <span>•</span>
+                    <span>{note.updatedAt ? new Date(note.updatedAt).toLocaleDateString() : 'Today'}</span>
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-400 shrink-0 mt-1" />
+              </div>
+            ))}
+
+            {notes.length === 0 && (
+              <div className="text-center py-8 text-slate-400 text-xs">
+                No field notebook logs recorded yet. Click "Open Notebook" to record your first entry.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Council Roles Directory */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-base font-bold text-[#0f1e36] flex items-center gap-2">
+              <Award className="w-4 h-4 text-emerald-600" />
+              Roles of Council
+            </h2>
+            {isAdmin && (
+              <button
+                onClick={() => onNavigateTo('settings')}
+                className="text-xs font-bold text-[#1e40af] hover:underline cursor-pointer"
+              >
+                Edit Roles
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-2.5">
+            {councilRoles.map((role) => (
+              <div
+                key={role.id}
+                className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <h3 className="text-xs font-bold text-[#0f1e36]">
+                    {role.roleName}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                    {role.assignedRoverName ? (
+                      <span className="text-emerald-700 font-semibold">{role.assignedRoverName} ({role.crew})</span>
+                    ) : (
+                      <span className="text-amber-600 italic">Unassigned</span>
+                    )}
+                  </p>
+                </div>
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

@@ -18,7 +18,8 @@ import {
   Award,
   Calendar,
   Camera,
-  Archive
+  Archive,
+  GraduationCap
 } from 'lucide-react';
 import { NavSection } from '../types';
 import { RoverLogo } from './RoverLogo';
@@ -42,6 +43,7 @@ interface SidebarProps {
   portalTagline?: string;
   onLogout?: () => void;
   currentUser?: any;
+  pagePermissions?: any[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -55,15 +57,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleAdmin,
   notesCount = 0,
   draftsCount = 0,
-  portalName = 'Koshaaru Portal',
+  portalName = 'Arabiyya Rover Network',
   portalTagline = 'Arabiyya Beyond Limits',
   onLogout,
-  currentUser
+  currentUser,
+  pagePermissions = []
 }) => {
-  const isAdvisor = currentUser?.role?.toLowerCase().includes('advisor') || currentUser?.title?.toLowerCase().includes('advisor');
+  const isAdvisor = (currentUser?.role || '').toLowerCase().includes('advisor') || (currentUser?.title || '').toLowerCase().includes('advisor') || (currentUser?.name || '').toLowerCase().includes('ziyad');
   const showSettings = isAdmin || isAdvisor;
 
-  const navItems = [
+  const hasPageAccess = (sectionId: string) => {
+    if (isAdmin || isAdvisor) return true;
+    if (['dashboard', 'chat', 'announcements', 'notebook', 'members', 'courses', 'settings'].includes(sectionId)) return true;
+
+    const userRole = currentUser?.role || '';
+    if (!userRole) return false;
+
+    // Check pagePermissions
+    const rolePerm = pagePermissions.find((p: any) => (p.memberId && p.memberId.toLowerCase() === userRole.toLowerCase()) || (p.memberName && p.memberName.toLowerCase() === userRole.toLowerCase()));
+    if (rolePerm) {
+      if (rolePerm.grantedPages?.includes(sectionId)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const rawNavItems = [
     {
       id: 'dashboard' as NavSection,
       label: 'Dashboard',
@@ -94,6 +115,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Members',
       icon: Users,
       active: currentSection === 'members',
+    },
+    {
+      id: 'courses' as NavSection,
+      label: 'Courses',
+      icon: GraduationCap,
+      active: currentSection === 'courses',
     },
     {
       id: 'governance' as NavSection,
@@ -138,6 +165,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       active: currentSection === 'settings',
     }] : []),
   ];
+
+  const navItems = rawNavItems.filter(item => hasPageAccess(item.id));
+  const mainNavIds = ['dashboard', 'chat', 'announcements', 'notebook', 'members', 'courses'];
+  const councilNavIds = ['governance', 'finance', 'progress', 'events', 'media', 'records'];
+  const settingsNavIds = ['settings'];
+
+  const mainNavItems = navItems.filter(item => mainNavIds.includes(item.id));
+  const councilNavItems = navItems.filter(item => councilNavIds.includes(item.id));
+  const settingsNavItems = navItems.filter(item => settingsNavIds.includes(item.id));
 
   return (
     <>
@@ -218,57 +254,170 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Navigation items */}
-        <div className="flex-1 overflow-y-auto px-2.5 py-4 space-y-1.5">
-          {!isCollapsed && (
-            <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Navigation
+        <div className="flex-1 overflow-y-auto px-2.5 py-4 space-y-4">
+          
+          <div className="space-y-1.5">
+            {!isCollapsed && (
+              <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Navigation
+              </div>
+            )}
+
+            {mainNavItems.map((item) => {
+              const Icon = item.icon;
+              const isSelected = item.active;
+
+              return (
+                <button
+                  key={item.id}
+                  id={`nav-item-${item.id}`}
+                  onClick={() => {
+                    onSelectSection(item.id);
+                    if (window.innerWidth < 1024) {
+                      onToggle();
+                    }
+                  }}
+                  title={isCollapsed ? item.label : undefined}
+                  className={`w-full flex items-center ${
+                    isCollapsed ? 'justify-center px-2 py-3' : 'justify-between px-3.5 py-2.5'
+                  } rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-[#1e40af] text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <div className={`flex items-center gap-3 ${isCollapsed ? 'justify-center' : ''}`}>
+                    <Icon className={`w-5 h-5 shrink-0 ${isSelected ? 'text-white' : 'text-slate-500'}`} />
+                    {!isCollapsed && <span>{item.label}</span>}
+                  </div>
+
+                  {!isCollapsed && (
+                    item.badge ? (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                        isSelected 
+                          ? 'bg-white/20 text-white border-white/30' 
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}>
+                        {item.badge}
+                      </span>
+                    ) : isSelected ? (
+                      <ChevronRight className="w-4 h-4 text-blue-200" />
+                    ) : null
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {councilNavItems.length > 0 && (
+            <div className="space-y-1.5">
+              {!isCollapsed && (
+                <div className="px-3 pt-2 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-t border-slate-100 mt-2">
+                  Council
+                </div>
+              )}
+
+              {councilNavItems.map((item) => {
+                const Icon = item.icon;
+                const isSelected = item.active;
+
+                return (
+                  <button
+                    key={item.id}
+                    id={`nav-item-${item.id}`}
+                    onClick={() => {
+                      onSelectSection(item.id);
+                      if (window.innerWidth < 1024) {
+                        onToggle();
+                      }
+                    }}
+                    title={isCollapsed ? item.label : undefined}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? 'justify-center px-2 py-3' : 'justify-between px-3.5 py-2.5'
+                    } rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#1e40af] text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <div className={`flex items-center gap-3 ${isCollapsed ? 'justify-center' : ''}`}>
+                      <Icon className={`w-5 h-5 shrink-0 ${isSelected ? 'text-white' : 'text-slate-500'}`} />
+                      {!isCollapsed && <span>{item.label}</span>}
+                    </div>
+
+                    {!isCollapsed && (
+                      item.badge ? (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                          isSelected 
+                            ? 'bg-white/20 text-white border-white/30' 
+                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      ) : isSelected ? (
+                        <ChevronRight className="w-4 h-4 text-blue-200" />
+                      ) : null
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
 
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isSelected = item.active;
-
-            return (
-              <button
-                key={item.id}
-                id={`nav-item-${item.id}`}
-                onClick={() => {
-                  onSelectSection(item.id);
-                  if (window.innerWidth < 1024) {
-                    onToggle();
-                  }
-                }}
-                title={isCollapsed ? item.label : undefined}
-                className={`w-full flex items-center ${
-                  isCollapsed ? 'justify-center px-2 py-3' : 'justify-between px-3.5 py-2.5'
-                } rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-[#1e40af] text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <div className={`flex items-center gap-3 ${isCollapsed ? 'justify-center' : ''}`}>
-                  <Icon className={`w-5 h-5 shrink-0 ${isSelected ? 'text-white' : 'text-slate-500'}`} />
-                  {!isCollapsed && <span>{item.label}</span>}
+          {settingsNavItems.length > 0 && (
+            <div className="space-y-1.5">
+              {!isCollapsed && (
+                <div className="px-3 pt-2 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-t border-slate-100 mt-2">
+                  Settings
                 </div>
+              )}
 
-                {!isCollapsed && (
-                  item.badge ? (
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
-                      isSelected 
-                        ? 'bg-white/20 text-white border-white/30' 
-                        : 'bg-slate-100 text-slate-600 border-slate-200'
-                    }`}>
-                      {item.badge}
-                    </span>
-                  ) : isSelected ? (
-                    <ChevronRight className="w-4 h-4 text-blue-200" />
-                  ) : null
-                )}
-              </button>
-            );
-          })}
+              {settingsNavItems.map((item) => {
+                const Icon = item.icon;
+                const isSelected = item.active;
+
+                return (
+                  <button
+                    key={item.id}
+                    id={`nav-item-${item.id}`}
+                    onClick={() => {
+                      onSelectSection(item.id);
+                      if (window.innerWidth < 1024) {
+                        onToggle();
+                      }
+                    }}
+                    title={isCollapsed ? item.label : undefined}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? 'justify-center px-2 py-3' : 'justify-between px-3.5 py-2.5'
+                    } rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#1e40af] text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <div className={`flex items-center gap-3 ${isCollapsed ? 'justify-center' : ''}`}>
+                      <Icon className={`w-5 h-5 shrink-0 ${isSelected ? 'text-white' : 'text-slate-500'}`} />
+                      {!isCollapsed && <span>{item.label}</span>}
+                    </div>
+
+                    {!isCollapsed && (
+                      item.badge ? (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                          isSelected 
+                            ? 'bg-white/20 text-white border-white/30' 
+                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      ) : isSelected ? (
+                        <ChevronRight className="w-4 h-4 text-blue-200" />
+                      ) : null
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Sidebar Footer / User Profile & Status */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Save, 
@@ -14,13 +14,18 @@ import {
   Sparkles,
   FileText,
   Clock,
-  Trash2
+  Trash2,
+  BookOpen
 } from 'lucide-react';
-import { NoteItem, NoteCategory, NoteStatus } from '../types';
+import { NoteItem, NoteCategory, NoteStatus, MemberItem } from '../types';
 import { RichTextEditor } from './RichTextEditor';
+import { collection, query, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
 
 interface NoteEditorProps {
   note: NoteItem | null;
+  currentUser?: MemberItem | null;
+  isAdmin?: boolean;
   onSave: (savedNote: NoteItem) => void;
   onCancel: () => void;
   onDelete?: (noteId: string) => void;
@@ -36,8 +41,35 @@ const CATEGORIES: NoteCategory[] = [
   'Announcement'
 ];
 
-export const NoteEditor: React.FC<NoteEditorProps> = ({ note, onSave, onCancel, onDelete }) => {
+export const NoteEditor: React.FC<NoteEditorProps> = ({ note, currentUser, isAdmin, onSave, onCancel, onDelete }) => {
   const isEditing = Boolean(note?.id);
+
+  const getActiveProfile = () => {
+    let name = 'Rover Scout';
+    let role = 'Rover Crew Member';
+
+    if (currentUser?.name) {
+      name = currentUser.name;
+    } else if ((currentUser as any)?.displayName) {
+      name = (currentUser as any).displayName;
+    } else if ((currentUser as any)?.email) {
+      name = (currentUser as any).email.split('@')[0];
+    } else if (isAdmin) {
+      name = 'Nazih Nafiz';
+    }
+
+    if (currentUser?.role) {
+      role = currentUser.role;
+    } else if (currentUser?.crew) {
+      role = `${currentUser.crew} Rover`;
+    } else if (isAdmin) {
+      role = 'Rover Scout Leader';
+    }
+
+    return { name, role };
+  };
+
+  const activeProf = getActiveProfile();
 
   const [title, setTitle] = useState(note?.title || '');
   const [excerpt, setExcerpt] = useState(note?.excerpt || '');
@@ -45,13 +77,61 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({ note, onSave, onCancel, 
   const [status, setStatus] = useState<NoteStatus>(note?.status || 'draft');
   const [category, setCategory] = useState<NoteCategory>(note?.category || 'General');
   const [tagsInput, setTagsInput] = useState(note?.tags ? note.tags.join(', ') : '');
-  const [author, setAuthor] = useState(note?.author || 'Rover Scout');
-  const [authorRole, setAuthorRole] = useState(note?.authorRole || 'Rover Crew Member');
+  const [author, setAuthor] = useState(
+    note?.author && note.author !== 'Rover Scout' && note.author !== 'Me' ? note.author : activeProf.name
+  );
+  const [authorRole, setAuthorRole] = useState(
+    note?.authorRole && note.authorRole !== 'Rover Crew Member' && note.authorRole !== 'Personal Note' ? note.authorRole : activeProf.role
+  );
   const [pinned, setPinned] = useState(Boolean(note?.pinned));
   const [coverColor, setCoverColor] = useState(note?.coverColor || '#800020');
+  const [relatedCourseId, setRelatedCourseId] = useState<string>(note?.relatedCourseId || '');
+  const [relatedCourseTitle, setRelatedCourseTitle] = useState<string>(note?.relatedCourseTitle || '');
+  const [availableCourses, setAvailableCourses] = useState<{id: string, title: string}[]>([]);
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  // Sync form state when note or currentUser prop changes
+  useEffect(() => {
+    const prof = getActiveProfile();
+    setTitle(note?.title || '');
+    setExcerpt(note?.excerpt || '');
+    setContent(note?.content || '');
+    setStatus(note?.status || 'draft');
+    setCategory(note?.category || 'General');
+    setTagsInput(note?.tags ? note.tags.join(', ') : '');
+    
+    // Auto populate author and role using logged-in profile
+    const targetAuthor = note?.author && note.author !== 'Rover Scout' && note.author !== 'Me' 
+      ? note.author 
+      : prof.name;
+    const targetAuthorRole = note?.authorRole && note.authorRole !== 'Rover Crew Member' && note.authorRole !== 'Personal Note'
+      ? note.authorRole
+      : prof.role;
+      
+    setAuthor(targetAuthor);
+    setAuthorRole(targetAuthorRole);
+    setPinned(Boolean(note?.pinned));
+    setCoverColor(note?.coverColor || '#800020');
+    setRelatedCourseId(note?.relatedCourseId || '');
+    setRelatedCourseTitle(note?.relatedCourseTitle || '');
+    setActiveTab('editor');
+    setFeedback(null);
+    setIsConfirmingDelete(false);
+  }, [note, currentUser, isAdmin]);
+
+  useEffect(() => {
+    const qCourses = query(collection(db, 'courses'));
+    const unsub = onSnapshot(qCourses, (snapshot) => {
+      const courses: {id: string, title: string}[] = [];
+      snapshot.forEach(doc => {
+        courses.push({ id: doc.id, title: doc.data().title });
+      });
+      setAvailableCourses(courses);
+    });
+    return () => unsub();
+  }, []);
 
   // Helper to extract clean plain text from HTML
   const getPlainText = (htmlString: string) => {
@@ -85,21 +165,24 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({ note, onSave, onCancel, 
       cleanExcerpt = plain.length > 140 ? plain.slice(0, 140) + '...' : plain;
     }
 
+    const currentProf = getActiveProfile();
     const updatedNote: NoteItem = {
       id: note?.id || `note-${Date.now()}`,
       title: title.trim(),
-      slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      slug: (title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
       excerpt: cleanExcerpt || 'No summary provided.',
       content: content.trim() || '<p>Start writing notes here...</p>',
       status: finalStatus,
       category,
       tags: cleanTags.length > 0 ? cleanTags : ['General'],
-      author: author.trim() || 'Rover Scout',
-      authorRole: authorRole.trim() || 'Rover Crew Member',
+      author: author.trim() || currentProf.name,
+      authorRole: authorRole.trim() || currentProf.role,
       createdAt: note?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       coverColor,
       pinned,
+      relatedCourseId: relatedCourseId || undefined,
+      relatedCourseTitle: relatedCourseTitle || undefined,
     };
 
     onSave(updatedNote);
@@ -395,25 +478,50 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({ note, onSave, onCancel, 
             </div>
           </div>
 
-          {/* Category Card */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-3">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-[#0f1e36] flex items-center gap-2 border-b border-slate-100 pb-2">
-              <Folder className="w-4 h-4 text-[#1e40af]" />
-              Category
-            </h2>
+          {/* Category & Course Card */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+            <div className="space-y-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[#0f1e36] flex items-center gap-2 border-b border-slate-100 pb-2">
+                <Folder className="w-4 h-4 text-[#1e40af]" />
+                Category
+              </h2>
+              <select
+                id="note-category-select"
+                value={category}
+                onChange={(e) => setCategory(e.target.value as NoteCategory)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-[#0f1e36] focus:outline-none focus:border-[#1e40af]"
+              >
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <select
-              id="note-category-select"
-              value={category}
-              onChange={(e) => setCategory(e.target.value as NoteCategory)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-[#0f1e36] focus:outline-none focus:border-[#1e40af]"
-            >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-3 pt-2">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[#0f1e36] flex items-center gap-2 border-b border-slate-100 pb-2">
+                <BookOpen className="w-4 h-4 text-indigo-600" />
+                Related Course Task
+              </h2>
+              <select
+                id="note-related-course-select"
+                value={relatedCourseId}
+                onChange={(e) => {
+                  setRelatedCourseId(e.target.value);
+                  const title = availableCourses.find(c => c.id === e.target.value)?.title || '';
+                  setRelatedCourseTitle(title);
+                }}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-[#0f1e36] focus:outline-none focus:border-indigo-600"
+              >
+                <option value="">-- No Related Course --</option>
+                {availableCourses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Tags Card */}
@@ -437,26 +545,57 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({ note, onSave, onCancel, 
 
           {/* Author Details Card */}
           <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-3">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-[#0f1e36] flex items-center gap-2 border-b border-slate-100 pb-2">
-              <User className="w-4 h-4 text-[#0f1e36]" />
-              Author &amp; Rover Role
-            </h2>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[#0f1e36] flex items-center gap-2">
+                <User className="w-4 h-4 text-[#0f1e36]" />
+                Author &amp; Rover Role
+              </h2>
+              <button
+                type="button"
+                id="sync-author-profile-btn"
+                onClick={() => {
+                  const prof = getActiveProfile();
+                  setAuthor(prof.name);
+                  setAuthorRole(prof.role);
+                }}
+                className="text-[10px] font-bold text-[#1e40af] hover:underline cursor-pointer flex items-center gap-1"
+                title="Reset to current logged-in profile"
+              >
+                Use My Profile
+              </button>
+            </div>
+
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase font-bold text-slate-400">Logged in Profile</div>
+                <div className="text-xs font-bold text-[#0f1e36] truncate">{activeProf.name}</div>
+                <div className="text-[10px] text-slate-500 truncate">{activeProf.role}</div>
+              </div>
+              <span className="shrink-0 px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-semibold rounded-full">
+                Active
+              </span>
+            </div>
+
             <div className="space-y-2.5">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">Author Name</label>
                 <input
+                  id="note-author-input"
                   type="text"
                   value={author}
                   onChange={(e) => setAuthor(e.target.value)}
+                  placeholder={activeProf.name}
                   className="w-full text-xs p-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0f1e36]"
                 />
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">Crew Role</label>
                 <input
+                  id="note-crew-role-input"
                   type="text"
                   value={authorRole}
                   onChange={(e) => setAuthorRole(e.target.value)}
+                  placeholder={activeProf.role}
                   className="w-full text-xs p-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#0f1e36]"
                 />
               </div>
@@ -496,7 +635,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({ note, onSave, onCancel, 
                 Danger Zone
               </label>
               <p className="text-xs text-rose-700 leading-relaxed">
-                Permanently delete this note and remove its record from your notebook and Cloud Firestore.
+                Permanently delete this note and remove its record from your notebook and Cloud.
               </p>
               <button
                 id="sidebar-delete-note-btn"
@@ -528,7 +667,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({ note, onSave, onCancel, 
                   Delete Note?
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Are you sure you want to delete <span className="font-semibold text-slate-900">"{title || 'this note'}"</span>? This will permanently remove this record from your notebook and Cloud Firestore.
+                  Are you sure you want to delete <span className="font-semibold text-slate-900">"{title || 'this note'}"</span>? This will permanently remove this record from your notebook and Cloud.
                 </p>
               </div>
             </div>

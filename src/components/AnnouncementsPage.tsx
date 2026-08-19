@@ -139,12 +139,13 @@ export const AnnouncementsPage: React.FC<AnnouncementsPageProps> = ({
   };
 
   // Filter and search
+  const q = (searchQuery || '').toLowerCase();
   const filteredAnnouncements = announcements.filter((item) => {
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
-    const matchesSearch = 
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.authorName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = !q ||
+      Boolean(item.title && item.title.toLowerCase().includes(q)) ||
+      Boolean(item.content && item.content.toLowerCase().includes(q)) ||
+      Boolean(item.authorName && item.authorName.toLowerCase().includes(q));
     return matchesCategory && matchesSearch;
   });
 
@@ -520,7 +521,7 @@ export const AnnouncementsPage: React.FC<AnnouncementsPageProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-[#0f1e36]">Confirm Announcement Deletion</h3>
-                <p className="text-xs text-slate-500">This action will sync across Firebase and cannot be undone.</p>
+                <p className="text-xs text-slate-500">This action will sync across Cloud and cannot be undone.</p>
               </div>
             </div>
 

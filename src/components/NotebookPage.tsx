@@ -72,13 +72,14 @@ export const NotebookPage: React.FC<NotebookPageProps> = ({
       }
       // Search query
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesTitle = note.title.toLowerCase().includes(q);
-        const matchesContent = note.content.toLowerCase().includes(q);
-        const matchesExcerpt = note.excerpt.toLowerCase().includes(q);
-        const matchesAuthor = note.author.toLowerCase().includes(q);
-        const matchesTags = note.tags.some((t) => t.toLowerCase().includes(q));
-        if (!matchesTitle && !matchesContent && !matchesExcerpt && !matchesAuthor && !matchesTags) {
+        const q = (searchQuery || '').toLowerCase();
+        const matchesTitle = Boolean(note.title && note.title.toLowerCase().includes(q));
+        const matchesContent = Boolean(note.content && note.content.toLowerCase().includes(q));
+        const matchesExcerpt = Boolean(note.excerpt && note.excerpt.toLowerCase().includes(q));
+        const matchesAuthor = Boolean(note.author && note.author.toLowerCase().includes(q));
+        const matchesCourse = Boolean(note.relatedCourseTitle && note.relatedCourseTitle.toLowerCase().includes(q));
+        const matchesTags = Boolean(note.tags && note.tags.some((t) => t && t.toLowerCase().includes(q)));
+        if (!matchesTitle && !matchesContent && !matchesExcerpt && !matchesAuthor && !matchesCourse && !matchesTags) {
           return false;
         }
       }
@@ -121,22 +122,6 @@ export const NotebookPage: React.FC<NotebookPageProps> = ({
               <span>Create Personal Note</span>
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Private & Confidential Notebook Notice */}
-      <div className="bg-slate-50 border border-indigo-100 rounded-xl p-4 flex gap-3 shadow-xs">
-        <div className="w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0 text-indigo-600">
-          <BookOpen className="w-4 h-4" />
-        </div>
-        <div className="space-y-1">
-          <h3 className="text-xs font-bold text-[#0f1e36] flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
-            Personal & Strictly Private Notebook
-          </h3>
-          <p className="text-[11px] text-slate-500 leading-normal font-medium">
-            Your personal, confidential notebook. Notes saved here are strictly private to your account and cannot be viewed or accessed by other crew members or administrators.
-          </p>
         </div>
       </div>
 
@@ -302,6 +287,13 @@ export const NotebookPage: React.FC<NotebookPageProps> = ({
                         {note.category}
                       </span>
 
+                      {/* Related Course */}
+                      {note.relatedCourseTitle && (
+                        <span className="px-2.5 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                          <BookOpen className="w-3 h-3" /> {note.relatedCourseTitle}
+                        </span>
+                      )}
+
                       {/* Pinned */}
                       {note.pinned && (
                         <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#800020]/10 text-[#800020] border border-[#800020]/20 flex items-center gap-1">
@@ -408,7 +400,7 @@ export const NotebookPage: React.FC<NotebookPageProps> = ({
                   Delete Rover Note?
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Are you sure you want to delete <span className="font-semibold text-slate-900">"{noteToDelete.title}"</span>? This will permanently remove this record from your notebook and Cloud Firestore.
+                  Are you sure you want to delete <span className="font-semibold text-slate-900">"{noteToDelete.title}"</span>? This will permanently remove this record from your notebook and Cloud.
                 </p>
               </div>
             </div>
